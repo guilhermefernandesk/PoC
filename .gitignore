@@ -1,0 +1,12 @@
+build/
+build-host/
+build-target/
+*.o
+*.a
+*.elf
+*.bin
+*.hex
+*.map
+__pycache__/
+*.pyc
+.vscode/
