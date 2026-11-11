@@ -136,12 +136,14 @@ the driver.
 
 ## LwIP/FreeRTOS boundary
 
-- The Modbus task calls only `ports/lwip/mb_transport_lwip.c`.
-- `mb_transport_lwip.c` uses netconn (`netconn_new`, `netconn_bind`,
+- The Modbus task drives the FreeModbus stack: `eMBTCPInit`,
+  `eMBEnable`, then an `eMBPoll()` loop; all I/O happens inside
+  `eMBPoll()` via `ports/lwip/porttcp.c`.
+- `porttcp.c` uses netconn (`netconn_new`, `netconn_bind`,
   `netconn_listen`, `netconn_accept`, `netconn_recv_tcp_pbuf`,
   `netconn_write`).
 - `LWIP_SO_RCVTIMEO=1` is required so `accept` and `recv` can return
-  `ERR_TIMEOUT` to the transport.
+  `ERR_TIMEOUT` to the port.
 - `LWIP_FREERTOS_THREAD_STACKSIZE_IS_STACKWORDS=1` keeps
   `TCPIP_THREAD_STACKSIZE=2048` as 8 KiB of FreeRTOS stack.
 - `INCLUDE_vTaskDelay=1` and `INCLUDE_vTaskSuspend=1` are required by the

@@ -2,22 +2,26 @@
 
 Servidor Modbus TCP portátil para uma NUCLEO-H743ZI2 (STM32H743ZIT6, PHY
 LAN8742A, RMII). A prova de conceito (PoC) substitui o link RS232/PLC atual
-por Modbus TCP e mantém o código Modbus independente de HAL, FreeRTOS e LwIP,
-para que possa ser reutilizado em um firmware de produção sem HAL
-posteriormente.
+por Modbus TCP. O núcleo Modbus é o **FreeModbus** (BSD-3-Clause,
+vendorizado sem alterações em `third_party/freemodbus`); os ports
+`ports/posix` e `ports/lwip` escritos aqui fazem todo o I/O TCP, sem HAL e
+sem depender de RTOS, para que possa ser reutilizado em um firmware de
+produção sem HAL posteriormente.
 
 ## O que está implementado
 
 - Servidor Modbus TCP na porta **502**, Unit ID **1** por padrão.
+- Stack escrava FreeModbus (vendorizada, sem alterações).
 - Códigos de função:
   - **FC03** Ler Registradores Holding
   - **FC04** Ler Registradores de Entrada
   - **FC06** Escrever Registrador Único
   - **FC16** Escrever Múltiplos Registradores
-- Tratamento correto do MBAP do Modbus TCP:
+- Tratamento correto do MBAP do Modbus TCP no port:
   - identificador de protocolo deve ser 0
   - ID de transação é ecoado
-  - Unit ID é filtrado (ou aceito com `accept_any_unit`)
+  - Unit ID é filtrado (ou aceita qualquer unidade com
+    `MB_PORT_TCP_ACCEPT_ANY_UNIT`)
   - quadros TCP fragmentados e agrupados são tratados
   - respostas de exceção: `01` função ilegal, `02` endereço de dados
     ilegal, `03` valor de dado ilegal
@@ -26,10 +30,13 @@ posteriormente.
   mapeia para o endereço holding `0`; PLC `30001` mapeia para o endereço de
   entrada `0`.
 - Um cliente Modbus TCP por vez. Um novo cliente é aceito depois que a
-  conexão anterior fecha ou expira.
-- Dois transportes:
+  conexão anterior fecha.
+- Dois ports do FreeModbus (mesmo desenho, `port.h` + `portevent.c` +
+  `porttcp.c`):
   - `ports/posix` para validação no host/PC com sockets Linux
   - `ports/lwip` para o alvo STM32 usando LwIP netconn
+- Todo o I/O acontece dentro de `eMBPoll()`: a aplicação é apenas um loop
+  `eMBTCPInit -> eMBEnable -> eMBPoll`, sem filas nem tarefas extras.
 - Suporte a alvo sem HAL:
   - configuração de clock HSI/PLL nos registradores RCC
   - configuração de GPIO RMII
@@ -40,19 +47,19 @@ posteriormente.
   - modelos de configuração FreeRTOS/LwIP
   - tarefas FreeRTOS nativas (sem CMSIS-RTOS)
 
-O núcleo Modbus portátil em `modules/modbus` não contém **nenhum** header de
-HAL, LwIP, FreeRTOS ou POSIX. Exemplos com HAL foram usados apenas como
-referência para valores de clock, pinagem, PHY e DMA.
+O núcleo FreeModbus vendorizado não contém **nenhum** header de HAL, LwIP,
+FreeRTOS ou POSIX — a configuração (`port.h`) e o I/O (port) são nossos.
+Exemplos com HAL foram usados apenas como referência para valores de
+clock, pinagem, PHY e DMA.
 
 ## Estrutura do repositório
 
 ```
-modules/modbus/          núcleo Modbus portátil
-ports/posix/             transporte por socket Linux (somente host)
-ports/lwip/              transporte LwIP netconn (alvo)
+third_party/freemodbus/  núcleo FreeModbus vendorizado (BSD, sem alterações)
+ports/posix/             port FreeModbus: sockets Linux (somente host)
+ports/lwip/              port FreeModbus: LwIP netconn (alvo)
 app/app_regs.c,h         mapa de registradores de demonstração
-tests/test_mb_pdu.c      testes unitários de PDU
-tests/test_mb_tcp.c      testes unitários de MBAP
+tests/test_mb_regs.c      testes unitários do mapa/callbacks
 tests/host/main_posix.c  servidor host POSIX
 tools/modbus_test.py     validação black-box Modbus TCP
 target/board/            clock, delay, GPIO e MPU sem HAL
@@ -61,7 +68,13 @@ target/net/              ethernetif LwIP, lwipopts.h, arch/cc.h
 target/app/              main e hooks do FreeRTOS
 target/FreeRTOSConfig.h  modelo de configuração do FreeRTOS
 target/poc_sources.cmake lista de fontes para um projeto CMake existente
+docs/                    guias: port sem HAL; migração FreeModbus-Plus-TCP
 ```
+
+Cada port tem três arquivos: `port.h` (configuração da stack + tipos +
+seções críticas), `portevent.c` (cola de eventos; roda o pool TCP dentro de
+`eMBPoll`) e `porttcp.c` (listener, framing MBAP, filtro de Unit ID, 1
+cliente por vez).
 
 ## 1. Validação no host primeiro
 
@@ -73,7 +86,7 @@ cmake --build build-host -j
 ctest --test-dir build-host --output-on-failure
 ```
 
-Resultado esperado: `mb_pdu` e `mb_tcp` passam.
+Resultado esperado: `mb_regs` passa.
 
 Inicie o servidor POSIX (a porta 5020 evita precisar de `root`):
 
@@ -236,6 +249,11 @@ O repositório não contém um projeto STM32Cube gerado. Gere um projeto
 localmente com a extensão STM32 para VS Code / STM32CubeMX para a
 NUCLEO-H743ZI2 e depois adicione os arquivos daqui.
 
+> Para portar este desenho para um projeto **Makefile + CMSIS-OS v1 +
+> FreeRTOS-Plus-TCP** (em vez de CMake + FreeRTOS nativo + LwIP), use o
+> guia completo em
+> [`docs/MIGRACAO_FREEMODBUS_FREERTOS_PLUS_TCP.md`](docs/MIGRACAO_FREEMODBUS_FREERTOS_PLUS_TCP.md).
+
 ### 4.1 O que manter do projeto gerado
 
 Mantenha estas partes geradas/do fornecedor:
@@ -320,7 +338,7 @@ Use `target/net/lwipopts.h` ou mescle estas configurações obrigatórias no
 #define NO_SYS 0
 #define LWIP_NETCONN 1
 #define LWIP_TCP 1
-#define LWIP_SO_RCVTIMEO 1   /* exigido por ports/lwip/mb_transport_lwip.c */
+#define LWIP_SO_RCVTIMEO 1   /* exigido por ports/lwip/porttcp.c */
 #define LWIP_DHCP 0
 #define LWIP_DNS 0
 #define LWIP_IPV6 0
@@ -338,9 +356,9 @@ valor diretamente para `xTaskCreate`, ele também está em palavras, então o
 valor é consistente.
 
 O heap do LwIP é uma alocação `.bss` normal na AXI SRAM cacheável. Apenas os
-descritores e buffers DMA da ETH ficam na janela D2 não cacheável. O
-transporte LwIP usa um objeto de conexão estático, então o caminho Modbus
-não precisa de heap da libc nem de `_sbrk` no alvo.
+descritores e buffers DMA da ETH ficam na janela D2 não cacheável. O port
+LwIP usa objetos estáticos, então o caminho Modbus não precisa de heap da
+libc nem de `_sbrk` no alvo.
 
 ### 4.5 Usar a configuração FreeRTOS do PoC
 
@@ -485,11 +503,11 @@ Antes de alterar o mapa, colete da documentação do PLC/RS232:
 Depois altere apenas:
 
 - `app/app_regs.c` para o mapa/dados
-- `target/app/main.c` para IP/porta, se necessário
-- `mb_map_init` Unit ID / `accept_any_unit`, se necessário
+- `ports/lwip/port.h` para Unit ID, porta e códigos de função, se
+  necessário
+- `target/app/main.c` para IP, se necessário
 
-O núcleo Modbus, a validação de PDU e o enquadramento TCP não precisam
-mudar.
+O núcleo FreeModbus e o enquadramento TCP do port não precisam mudar.
 
 ## 9. Limitações conhecidas
 
@@ -498,7 +516,9 @@ mudar.
   mas PHY/link/ping e interoperabilidade com o PLC precisam ser validados na
   placa.
 - Um cliente Modbus TCP por vez.
-- Apenas FC03/FC04/FC06/FC16.
+- Apenas FC03/FC04/FC06/FC16 (outros códigos respondem exceção 01; habilite
+  em `ports/*/port.h` e implemente o callback se o PLC precisar).
+- O FreeModbus é single-instance: uma stack Modbus por firmware.
 - Apenas IPv4 estático; sem DHCP, DNS, IPv6, TLS ou autenticação.
 - Sem armazenamento persistente de registradores; os valores são reiniciados
   no reboot.
@@ -512,6 +532,8 @@ mudar.
 
 ## 10. Referências usadas para configuração
 
+- FreeModbus (cwalter-at/freemodbus, commit `a9ec789`, BSD-3-Clause) —
+  núcleo vendorizado em `third_party/freemodbus`
 - Headers de dispositivo CMSIS do STM32H7 (`stm32h743xx.h`) para definições
   de registradores
 - Exemplos LwIP do STM32CubeH7 para valores de ETH/LwIP do H7
@@ -522,5 +544,6 @@ mudar.
 - Modbus Application Protocol V1.1b3 e Modbus Messaging on TCP/IP V1.0b
 
 Os exemplos de referência da HAL foram usados apenas para valores. Nenhum
-código-fonte da HAL faz parte do núcleo Modbus, do transporte POSIX, do
-transporte LwIP ou dos drivers do alvo.
+código-fonte da HAL faz parte do núcleo FreeModbus, dos ports POSIX/LwIP ou
+dos drivers do alvo. A única dependência de terceiros é o próprio
+FreeModbus (BSD-3-Clause).

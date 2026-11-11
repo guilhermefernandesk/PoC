@@ -11,9 +11,9 @@
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
 #include "lwip/tcpip.h"
-#include "mb_server.h"
-#include "mb_transport_lwip.h"
+#include "mb.h"
 #include "net/ethernetif.h"
+#include "port.h"
 
 static struct netif g_netif;
 
@@ -39,17 +39,23 @@ static void modbus_task(void *argument)
 {
     (void)argument;
 
-    const mb_server_cfg_t cfg = {
-        .transport = mb_transport_lwip_get(),
-        .map = app_regs_map(),
-        .port = 502u,
-        .accept_timeout_ms = 1000u,
-        .recv_timeout_ms = 30000u,
-    };
+    /* FreeModbus lifecycle: init (binds the port) -> enable -> poll.
+     * All TCP I/O happens inside eMBPoll() (ports/lwip/porttcp.c). */
+    while (eMBTCPInit(MB_PORT_TCP_LISTEN_PORT) != MB_ENOERR) {
+        vTaskDelay(pdMS_TO_TICKS(1000u));
+    }
+
+    while (eMBEnable() != MB_ENOERR) {
+        vTaskDelay(pdMS_TO_TICKS(1000u));
+    }
 
     for (;;) {
-        (void)mb_server_run(&cfg);
-        vTaskDelay(pdMS_TO_TICKS(1000u));
+        if (eMBPoll() != MB_ENOERR) {
+            /* Should not happen; restart the stack if it does. */
+            (void)eMBDisable();
+            vTaskDelay(pdMS_TO_TICKS(1000u));
+            (void)eMBEnable();
+        }
     }
 }
 

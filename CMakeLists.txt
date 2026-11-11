@@ -12,46 +12,57 @@ endif()
 
 set(POC_WARNINGS -Wall -Wextra -Wpedantic)
 
-# Portable Modbus core: no HAL, LwIP, FreeRTOS or POSIX headers here.
-add_library(modbus STATIC
-    modules/modbus/mb_map.c
-    modules/modbus/mb_pdu.c
-    modules/modbus/mb_tcp.c
-    modules/modbus/mb_server.c
-)
-target_include_directories(modbus PUBLIC
-    ${CMAKE_CURRENT_SOURCE_DIR}/modules/modbus
-)
-target_compile_options(modbus PRIVATE ${POC_WARNINGS})
+# Vendored FreeModbus stack (BSD-3-Clause, unmodified). port.h comes from
+# the port directory, so the core and its port are always built together.
+set(FREEMODBUS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/freemodbus/modbus)
 
-# Host-only transport. The target uses ports/lwip instead.
-add_library(mb_port_posix STATIC
-    ports/posix/mb_transport_posix.c
+set(FREEMODBUS_CORE_SOURCES
+    ${FREEMODBUS_DIR}/mb.c
+    ${FREEMODBUS_DIR}/functions/mbfunccoils.c
+    ${FREEMODBUS_DIR}/functions/mbfuncdiag.c
+    ${FREEMODBUS_DIR}/functions/mbfuncdisc.c
+    ${FREEMODBUS_DIR}/functions/mbfuncfile.c
+    ${FREEMODBUS_DIR}/functions/mbfuncholding.c
+    ${FREEMODBUS_DIR}/functions/mbfuncinput.c
+    ${FREEMODBUS_DIR}/functions/mbfuncother.c
+    ${FREEMODBUS_DIR}/functions/mbutils.c
+    ${FREEMODBUS_DIR}/tcp/mbtcp.c
 )
-target_include_directories(mb_port_posix PUBLIC
+
+# Host build: FreeModbus core + POSIX port (sockets). The STM32H7 target
+# uses ports/lwip instead (see target/poc_sources.cmake).
+add_library(freemodbus_posix STATIC
+    ${FREEMODBUS_CORE_SOURCES}
+    ports/posix/portevent.c
+    ports/posix/porttcp.c
+)
+target_include_directories(freemodbus_posix PUBLIC
+    ${FREEMODBUS_DIR}/include
+    ${FREEMODBUS_DIR}/tcp
     ${CMAKE_CURRENT_SOURCE_DIR}/ports/posix
 )
-target_link_libraries(mb_port_posix PUBLIC modbus)
-target_compile_options(mb_port_posix PRIVATE ${POC_WARNINGS})
+# The PoC warning policy applies to PoC-owned files only; the vendored
+# core is upstream code kept unmodified.
+set_source_files_properties(ports/posix/portevent.c ports/posix/porttcp.c
+    PROPERTIES COMPILE_OPTIONS "${POC_WARNINGS}")
 
 add_executable(mb_server_posix
     app/app_regs.c
     tests/host/main_posix.c
 )
-target_include_directories(mb_server_posix PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/app
-)
-target_link_libraries(mb_server_posix PRIVATE modbus mb_port_posix)
+target_include_directories(mb_server_posix PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/app)
+target_link_libraries(mb_server_posix PRIVATE freemodbus_posix)
 target_compile_options(mb_server_posix PRIVATE ${POC_WARNINGS})
 
 enable_testing()
 
-add_executable(test_mb_pdu tests/test_mb_pdu.c)
-target_link_libraries(test_mb_pdu PRIVATE modbus)
-target_compile_options(test_mb_pdu PRIVATE ${POC_WARNINGS})
-add_test(NAME mb_pdu COMMAND test_mb_pdu)
-
-add_executable(test_mb_tcp tests/test_mb_tcp.c)
-target_link_libraries(test_mb_tcp PRIVATE modbus)
-target_compile_options(test_mb_tcp PRIVATE ${POC_WARNINGS})
-add_test(NAME mb_tcp COMMAND test_mb_tcp)
+# Register map / FreeModbus callbacks. TCP protocol behaviour is validated
+# by tools/modbus_test.py against mb_server_posix (see README.md).
+add_executable(test_mb_regs
+    tests/test_mb_regs.c
+    app/app_regs.c
+)
+target_include_directories(test_mb_regs PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/app)
+target_link_libraries(test_mb_regs PRIVATE freemodbus_posix)
+target_compile_options(test_mb_regs PRIVATE ${POC_WARNINGS})
+add_test(NAME mb_regs COMMAND test_mb_regs)

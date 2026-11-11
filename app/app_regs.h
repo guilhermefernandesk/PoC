@@ -1,16 +1,18 @@
 #ifndef APP_REGS_H
 #define APP_REGS_H
 
-#include "mb_types.h"
-
 /*
  * Demo register map. Replace this file with the real PLC mapping later.
  *
- * Protocol addresses are zero-based:
- *   PLC 40001 <-> holding[0]
- *   PLC 30001 <-> input[0]
+ * Register arrays are zero-based (holding[0] is PLC 40001). The FreeModbus
+ * callbacks translate the 1-based protocol addresses they receive
+ * (PDU address N -> callback N + 1), so callers see plain 0-based PDU
+ * addresses, as tools/modbus_test.py expects.
  */
-void app_regs_init(void);
-mb_map_t *app_regs_map(void);
+
+#define APP_REGS_HOLDING_COUNT 100u
+#define APP_REGS_INPUT_COUNT   100u
+
+void app_regs_init( void );
 
 #endif

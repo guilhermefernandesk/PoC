@@ -1,4 +1,4 @@
-# Portable Modbus PoC source list for an existing STM32Cube/CMake project.
+# Modbus TCP PoC source list for an existing STM32Cube/CMake project.
 #
 # Usage after the firmware target exists:
 #
@@ -13,12 +13,22 @@
 
 set(POC_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 
+set(POC_FREEMODBUS_DIR "${POC_ROOT}/third_party/freemodbus/modbus")
+
+# Vendored FreeModbus stack (BSD-3-Clause, unmodified) + LwIP port.
 set(POC_MODBUS_SOURCES
-    "${POC_ROOT}/modules/modbus/mb_map.c"
-    "${POC_ROOT}/modules/modbus/mb_pdu.c"
-    "${POC_ROOT}/modules/modbus/mb_tcp.c"
-    "${POC_ROOT}/modules/modbus/mb_server.c"
-    "${POC_ROOT}/ports/lwip/mb_transport_lwip.c"
+    "${POC_FREEMODBUS_DIR}/mb.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbfunccoils.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbfuncdiag.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbfuncdisc.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbfuncfile.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbfuncholding.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbfuncinput.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbfuncother.c"
+    "${POC_FREEMODBUS_DIR}/functions/mbutils.c"
+    "${POC_FREEMODBUS_DIR}/tcp/mbtcp.c"
+    "${POC_ROOT}/ports/lwip/portevent.c"
+    "${POC_ROOT}/ports/lwip/porttcp.c"
 )
 
 set(POC_TARGET_BOARD_SOURCES
@@ -49,7 +59,8 @@ set(POC_SOURCES
 )
 
 set(POC_INCLUDE_DIRS
-    "${POC_ROOT}/modules/modbus"
+    "${POC_FREEMODBUS_DIR}/include"
+    "${POC_FREEMODBUS_DIR}/tcp"
     "${POC_ROOT}/ports/lwip"
     "${POC_ROOT}/app"
     "${POC_ROOT}/target"

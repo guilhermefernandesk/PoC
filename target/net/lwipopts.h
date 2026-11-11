@@ -27,7 +27,7 @@
 #define LWIP_NETIF_STATUS_CALLBACK 1
 #define LWIP_NETIF_LINK_CALLBACK 1
 
-/* Required by ports/lwip/mb_transport_lwip.c. */
+/* Required by ports/lwip/porttcp.c. */
 #define LWIP_SO_RCVTIMEO 1
 #define LWIP_SO_SNDTIMEO 0
 
