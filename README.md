@@ -68,6 +68,7 @@ target/net/              ethernetif LwIP, lwipopts.h, arch/cc.h
 target/app/              main e hooks do FreeRTOS
 target/FreeRTOSConfig.h  modelo de configuração do FreeRTOS
 target/poc_sources.cmake lista de fontes para um projeto CMake existente
+class.md                 aula: protocolo Modbus TCP, CLP e ponte MQTT
 docs/                    guias: port sem HAL; migração FreeModbus-Plus-TCP
 ```
 
