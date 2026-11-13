@@ -114,7 +114,7 @@ static int open_socket(void)
     s_sock = FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_STREAM,
                              FREERTOS_IPPROTO_TCP);
     if (s_sock == FREERTOS_INVALID_SOCKET) {
-        tcpprobe_log("mbtcp: socket() falhou (heap=%u)",
+        tcpprobe_log("mbtcp: socket() falhou (heap=%u)\r\n",
                      (unsigned)xPortGetFreeHeapSize());
         return MBTCP_ECONN;
     }
@@ -576,4 +576,53 @@ const char *mbtcp_strerror(int err)
     case MBTCP_EINVAL:      return "invalid arg";
     default:                return "?";
     }
+}
+
+
+#define DEMO_IP "10.1.120.15"
+#define DEMO_PORT 1502u
+#define DEMO_UNIT 1u
+#define DEMO_ADDR 0u
+#define DEMO_QTY 1u
+
+#if (DEMO_QTY < 1u) || (DEMO_QTY > 125u)
+#error "DEMO_QTY deve ficar entre 1 e 125"
+#endif
+
+static int s_ready = 0;
+
+int demo_init(void)
+{
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    uint16_t v[DEMO_QTY];
+    unsigned i;
+    int rc;
+
+    if (!s_ready) {
+        tcpprobe_env_dump();
+
+        rc = mbtcp_open(DEMO_IP, DEMO_PORT, 1000u);
+
+        tcpprobe_log("demo: open %s:%u -> %d (%s)",
+                     DEMO_IP, (unsigned)DEMO_PORT,
+                     rc, mbtcp_strerror(rc));
+
+        s_ready = 1;   /* mesmo se falhar: mbtcp_read reconecta */
+    }
+
+    rc = mbtcp_read((uint8_t)DEMO_UNIT, 3u, (uint16_t)DEMO_ADDR,
+                    (uint16_t)DEMO_QTY, v);
+
+    if (rc == MBTCP_OK) {
+        for (i = 0u; i < DEMO_QTY; i++) {
+            tcpprobe_log("demo_OK: reg[%u] = %04X (%u)",
+                         (unsigned)(DEMO_ADDR + i),
+                         (unsigned)v[i], (unsigned)v[i]);
+        }
+    } else {
+        tcpprobe_log("demo_NOT_OK: read -> %d (%s) exc=%d",
+                     rc, mbtcp_strerror(rc), mbtcp_last_exception());
+    }
+
+    return rc;
 }

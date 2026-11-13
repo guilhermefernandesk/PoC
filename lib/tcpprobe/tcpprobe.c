@@ -15,7 +15,13 @@
 #include "FreeRTOS_IP.h"
 #include "FreeRTOS_Sockets.h"
 
-extern UART_HandleTypeDef huart3;
+#include "stm32h7xx_hal.h"
+#include "FreeRTOS.h"
+#include "task.h"
+#include <stdio.h>
+#include <string.h>
+
+// extern UART_HandleTypeDef huart3;
 
 /* ------------------------------------------------------------------ */
 /* logging                                                             */
@@ -46,8 +52,8 @@ void tcpprobe_log(const char *fmt, ...)
         if (n >= sizeof(buf)) {
             n = sizeof(buf) - 1;
         }
-        HAL_UART_Transmit(&huart3, (uint8_t *)buf, n, HAL_MAX_DELAY);
-        HAL_UART_Transmit(&huart3, (uint8_t *)"\r\n", 2, HAL_MAX_DELAY);
+        // HAL_UART_Transmit(&huart3, (uint8_t *)buf, n, HAL_MAX_DELAY);
+        // HAL_UART_Transmit(&huart3, (uint8_t *)"\r\n", 2, HAL_MAX_DELAY);
     }
     va_end(ap);
 
@@ -59,6 +65,8 @@ void tcpprobe_log(const char *fmt, ...)
         s_logger(buf);
     } else {
         printf("[tcpprobe] %s\r\n", buf);
+       
+
     }
 #else
     (void)fmt;
@@ -241,6 +249,7 @@ int tcpprobe_tcp_client(const char *ip, uint16_t port,
         vTaskDelay(pdMS_TO_TICKS(250));
     }
 
+
     if ((ip == NULL) || (rx == NULL) || (rxcap == 0u)) {
         return TCPPROBE_EINVAL;
     }
@@ -316,4 +325,63 @@ int tcpprobe_tcp_client(const char *ip, uint16_t port,
         return TCPPROBE_ERECV;
     }
     return TCPPROBE_ETIMEOUT;
+}
+
+
+#define TCPPROBE_EXAMPLE_STACK_WORDS 384
+#define TCPPROBE_EXAMPLE_PRIO (tskIDLE_PRIORITY + 2)
+
+typedef struct {
+    const char *ip;
+    uint16_t port;
+} example_ctx_t;
+
+static example_ctx_t s_ctx;
+
+static void example_task(void *arg)
+{
+    example_ctx_t *c = (example_ctx_t *)arg;
+    uint8_t rx[64];
+    int n;
+
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    tcpprobe_env_dump();
+
+    n = tcpprobe_tcp_client(c->ip, c->port, "hello", 5,
+                            rx, (uint16_t)sizeof(rx), 2000u);
+
+    if (n > 0) {
+        tcpprobe_log("S0 OK: %d bytes recebidos", n);
+    } else {
+        tcpprobe_log("S0 FALHOU: %d (%s)", n,
+                     (n == TCPPROBE_ECONN)    ? "connect" :
+                     (n == TCPPROBE_ESEND)    ? "send"    :
+                     (n == TCPPROBE_ETIMEOUT) ? "timeout" :
+                     (n == TCPPROBE_ERECV)    ? "peer fechou" : "arg");
+    }
+
+    vTaskDelete(NULL);
+}
+
+void tcpprobe_example_start(const char *ip, uint16_t port)
+{
+    s_ctx.ip = ip;
+    s_ctx.port = port;
+
+#if (configSUPPORT_STATIC_ALLOCATION == 1)
+    {
+        static StackType_t stk[TCPPROBE_EXAMPLE_STACK_WORDS];
+        static StaticTask_t tcb;
+
+        (void)xTaskCreateStatic(example_task, "tcp_s0",
+                                TCPPROBE_EXAMPLE_STACK_WORDS,
+                                &s_ctx, TCPPROBE_EXAMPLE_PRIO,
+                                stk, &tcb);
+    }
+#else
+    (void)xTaskCreate(example_task, "tcp_s0",
+                      TCPPROBE_EXAMPLE_STACK_WORDS,
+                      &s_ctx, TCPPROBE_EXAMPLE_PRIO, NULL);
+#endif
 }

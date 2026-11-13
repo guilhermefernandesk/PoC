@@ -23,31 +23,21 @@ extern "C" {
 /* ------------------------------------------------------------------ */
 
 /* 0 = remove todo o logging (compila vazio) */
-#ifndef TCPPROBE_LOG_ENABLE
 #define TCPPROBE_LOG_ENABLE 1
-#endif
 
 /* 1 = usa FreeRTOS_IsNetworkUp() no env_dump.
  * Se sua versao nao tiver a funcao, compile com -DTCPPROBE_HAS_ISNETWORKUP=0 */
-#ifndef TCPPROBE_HAS_ISNETWORKUP
 #define TCPPROBE_HAS_ISNETWORKUP 1
-#endif
 
 /* 1 = usa FreeRTOS_GetEndPointConfiguration() para imprimir IP/mask/gw.
  * Disponivel em FreeRTOS-Plus-TCP v3/v4. Deixe 0 se nao existir na sua. */
-#ifndef TCPPROBE_HAS_ENDPOINT_CFG
 #define TCPPROBE_HAS_ENDPOINT_CFG 1
-#endif
 
 /* 1 = usa xPortGetMinimumEverFreeHeapSize() (heap_4/heap_5) */
-#ifndef TCPPROBE_HAS_MIN_HEAP
 #define TCPPROBE_HAS_MIN_HEAP 1
-#endif
 
 /* Tamanho do buffer de uma linha de log */
-#ifndef TCPPROBE_LOG_BUF
 #define TCPPROBE_LOG_BUF 192
-#endif
 
 /* ------------------------------------------------------------------ */
 /* Erros                                                               */
