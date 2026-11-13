@@ -14,7 +14,7 @@ lib/
     ├── mbtcp.h
     ├── mbtcp.c
     ├── mbtcp.mk
-    └── mbtcp_demo.c     (S3, nao compilado)
+    └── mbtcp_demo.c     (demo_init, nao compilado)
 ```
 
 ## Integracao no Makefile
@@ -69,6 +69,23 @@ Retornos: `MBTCP_OK` (0) ou negativo (`MBTCP_ECONN`, `MBTCP_ESEND`,
 `MBTCP_ETIMEOUT`, `MBTCP_EFRAME`, `MBTCP_EEXCEPTION`, `MBTCP_EBUSY`,
 `MBTCP_EINVAL`).
 
+### Demo na thread existente
+
+`mbtcp_demo.c` **nao** cria task, loop nem delay. Copie a funcao para o
+`.c` da sua thread (ou adicione o arquivo ao `C_SOURCES`) e chame dentro
+do `for(;;)`:
+
+```c
+for (;;) {
+    demo_init();                    /* 1a vez: setup; depois: 1 leitura */
+    vTaskDelay(pdMS_TO_TICKS(1000));
+}
+```
+
+Ajuste `DEMO_IP`, `DEMO_PORT`, `DEMO_UNIT`, `DEMO_ADDR` e `DEMO_QTY` no
+topo do arquivo. Se a rede ainda nao subiu, o primeiro `mbtcp_open` pode
+falhar; a leitura seguinte reconecta sozinha.
+
 ## Pontos de projeto
 
 - **Um socket, um mutex.** Nao cria task permanente; usa a task que ja
@@ -95,6 +112,20 @@ Em `FreeRTOSIPConfig.h`:
 Cada socket TCP consome ~`RX + TX` bytes do heap do FreeRTOS. Se
 `FreeRTOS_socket()` retorna `FREERTOS_INVALID_SOCKET`, o heap acabou:
 reduza os buffers ou aumente `configTOTAL_HEAP_SIZE`.
+
+### Macros de compilacao (opcionais)
+
+Nao precisa de nenhuma `-D` por padrao; os headers tem defaults. Se o
+compilador reclamar:
+
+| Sintoma | Opcao |
+| --- | --- |
+| `FreeRTOS_IsNetworkUp` ausente | `-DTCPPROBE_HAS_ISNETWORKUP=0` |
+| `xPortGetMinimumEverFreeHeapSize` ausente | `-DTCPPROBE_HAS_MIN_HEAP=0` |
+| quer IP/mascara/gateway no `env_dump` | `-DTCPPROBE_HAS_ENDPOINT_CFG=1` |
+| silenciar hex de TX/RX | `-DMBTCP_TRACE=0` |
+
+Exemplo no Makefile: `C_DEFS += -DTCPPROBE_HAS_ISNETWORKUP=0`.
 
 ## Validacao (PC, sem SEW)
 

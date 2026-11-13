@@ -91,10 +91,11 @@ int mbtcp_last_exception(void);
 const char *mbtcp_strerror(int err);
 
 /* ------------------------------------------------------------------ */
-/* Demo (opcional; implementada em mbtcp_demo.c, nao compilada pelo  */
-/* mbtcp.mk). Cria uma task temporaria que le 4 registradores em loop.*/
+/* Demo (opcional; implementada em mbtcp_demo.c, nao compilada pelo   */
+/* mbtcp.mk). Chame demo_init() dentro do for(;;) da sua thread:      */
+/* a primeira chamada faz setup; as seguintes fazem uma leitura FC03. */
 /* ------------------------------------------------------------------ */
-void mbtcp_demo_start(const char *ip, uint16_t port, uint8_t unit);
+int demo_init(void);
 
 #ifdef __cplusplus
 }
