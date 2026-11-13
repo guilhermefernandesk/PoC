@@ -34,7 +34,7 @@ static void example_task(void *arg)
     uint8_t rx[64];
     int n;
 
-    vTaskDelay(pdMS_TO_TICKS(5000));
+    vTaskDelay(pdMS_TO_TICKS(1000));
 
     tcpprobe_env_dump();
 

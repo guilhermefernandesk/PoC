@@ -15,6 +15,8 @@
 #include "FreeRTOS_IP.h"
 #include "FreeRTOS_Sockets.h"
 
+extern UART_HandleTypeDef huart3;
+
 /* ------------------------------------------------------------------ */
 /* logging                                                             */
 /* ------------------------------------------------------------------ */
@@ -39,6 +41,14 @@ void tcpprobe_log(const char *fmt, ...)
 
     va_start(ap, fmt);
     n = vsnprintf(buf, sizeof(buf), fmt, ap);
+    if (n > 0) {
+        // Garante que não ultrapasse o tamanho do buffer caso a string seja muito grande
+        if (n >= sizeof(buf)) {
+            n = sizeof(buf) - 1;
+        }
+        HAL_UART_Transmit(&huart3, (uint8_t *)buf, n, HAL_MAX_DELAY);
+        HAL_UART_Transmit(&huart3, (uint8_t *)"\r\n", 2, HAL_MAX_DELAY);
+    }
     va_end(ap);
 
     if (n < 0) {
@@ -178,7 +188,7 @@ void tcpprobe_env_dump(void)
         uint32_t gw = 0;
         uint32_t dns = 0;
 
-        FreeRTOS_GetEndPointConfiguration(&ip, &mask, &gw, &dns);
+        FreeRTOS_GetAddressConfiguration(&ip, &mask, &gw, &dns);
 
         tcpprobe_log("ip=%u.%u.%u.%u mask=%u.%u.%u.%u gw=%u.%u.%u.%u",
                      (unsigned)(ip & 0xFFu),
@@ -227,6 +237,10 @@ int tcpprobe_tcp_client(const char *ip, uint16_t port,
     uint32_t off;
     int32_t n;
 
+    while (FreeRTOS_IsNetworkUp() == pdFALSE) {
+        vTaskDelay(pdMS_TO_TICKS(250));
+    }
+
     if ((ip == NULL) || (rx == NULL) || (rxcap == 0u)) {
         return TCPPROBE_EINVAL;
     }
@@ -260,8 +274,9 @@ int tcpprobe_tcp_client(const char *ip, uint16_t port,
 
     tcpprobe_log("tcp: connect %s:%u ...", ip, (unsigned)port);
 
-    if (FreeRTOS_connect(sock, &sa, sizeof(sa)) < 0) {
-        tcpprobe_log("tcp: connect falhou");
+    BaseType_t rc = FreeRTOS_connect(sock, &sa, sizeof(sa));
+    if (rc < 0) {
+        tcpprobe_log("tcp: connect falhou (err=%d)", (int)rc);
         (void)FreeRTOS_closesocket(sock);
         return TCPPROBE_ECONN;
     }

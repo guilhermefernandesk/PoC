@@ -36,7 +36,7 @@ extern "C" {
 /* 1 = usa FreeRTOS_GetEndPointConfiguration() para imprimir IP/mask/gw.
  * Disponivel em FreeRTOS-Plus-TCP v3/v4. Deixe 0 se nao existir na sua. */
 #ifndef TCPPROBE_HAS_ENDPOINT_CFG
-#define TCPPROBE_HAS_ENDPOINT_CFG 0
+#define TCPPROBE_HAS_ENDPOINT_CFG 1
 #endif
 
 /* 1 = usa xPortGetMinimumEverFreeHeapSize() (heap_4/heap_5) */

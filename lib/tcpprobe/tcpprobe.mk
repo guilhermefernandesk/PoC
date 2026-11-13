@@ -7,10 +7,7 @@
 
 ifeq ($(TCPPROBE_INCLUDED),)
 TCPPROBE_INCLUDED := 1
-
-TCPPROBE_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
-
-C_SOURCES  += $(TCPPROBE_DIR)/tcpprobe.c
+TCPPROBE_DIR := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
+C_SOURCES += $(TCPPROBE_DIR)/tcpprobe.c
 C_INCLUDES += -I$(TCPPROBE_DIR)
-
 endif
