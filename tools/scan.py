@@ -3,11 +3,12 @@
 
 Uso:
     python3 scan.py HOST PORT
+    python3 scan.py HOST PORT --units 0 --addr 1 --range --end 16
     python3 scan.py HOST PORT --units 1-10,20,255
-    python3 scan.py HOST PORT --units 1 --range --end 32
 
 Cada unit e' testado com uma leitura FC03 de 1 registrador (addr 0).
-Depois, com --range, varre enderecos para os units que responderam.
+O UHX65A usa unit 0 e process data comecando em 1. Depois, com --range,
+varre enderecos para os units que responderam.
 
 Cuidado: nao rode isso contra o SEW real sem saber o que esta fazendo.
 Contra o simulador e' seguro.
@@ -73,8 +74,8 @@ def main():
     ap = argparse.ArgumentParser(description="Scanner Modbus TCP")
     ap.add_argument("host")
     ap.add_argument("port", type=int)
-    ap.add_argument("--units", default="1",
-                    help="lista/faixa, ex: 1-10,20,255 (default: 1)")
+    ap.add_argument("--units", default="0",
+                    help="lista/faixa, ex: 0,1-10,255 (default: 0, UHX65A)")
     ap.add_argument("--fc", type=int, default=3, choices=[3, 4])
     ap.add_argument("--addr", type=int, default=0)
     ap.add_argument("--qty", type=int, default=1)
