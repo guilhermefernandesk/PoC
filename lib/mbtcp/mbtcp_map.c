@@ -2,8 +2,8 @@
  * mbtcp_map.c - mapa de pontos sobre o cliente Modbus TCP.
  *
  * Assume uso por UMA task (a task de processo). O transporte tem mutex,
- * mas os buffers de scratch abaixo sao unicos; se duas tasks chamarem o
- * mapa ao mesmo tempo, proteja com um mutex da aplicacao.
+ * mas o buffer de leitura abaixo e' unico; se duas tasks chamarem o mapa
+ * ao mesmo tempo, proteja com um mutex da aplicacao.
  */
 #include "mbtcp_map.h"
 #include "tcpprobe.h"
@@ -13,192 +13,176 @@
 #include "FreeRTOS.h"
 #include "task.h"
 
-#define MBMAP_MAX_REGS 125u
-#define MBMAP_MAX_BITS 2000u
+#define MBMAP_WAIT_INTERVAL_MS 10u
+#define MBMAP_MAX_POINT_REGISTERS 2u
+#define MBMAP_ADDRESS_SPACE 65536u
 
-static uint16_t s_regs[MBMAP_MAX_REGS];
-static uint8_t s_bits[(MBMAP_MAX_BITS + 7u) / 8u];
+static uint16_t s_registers[MBMAP_MAX_REGISTERS];
 
-static float scale_or_one(float scale)
+static uint16_t register_count(uint8_t type)
 {
-    return ((scale > 0.0f) || (scale < 0.0f)) ? scale : 1.0f;
-}
-
-/* IEEE-754 float32: exp=0xFF cobre NaN e infinito. */
-static int is_nonfinite_f32(float f)
-{
-    uint32_t u;
-
-    memcpy(&u, &f, sizeof(u));
-    return (u & 0x7F800000u) == 0x7F800000u;
-}
-
-static int is_nan_f32(float f)
-{
-    uint32_t u;
-
-    memcpy(&u, &f, sizeof(u));
-    return ((u & 0x7F800000u) == 0x7F800000u) &&
-           ((u & 0x007FFFFFu) != 0u);
-}
-
-static uint16_t point_regs(const mbpoint_t *p)
-{
-    switch (p->type) {
+    switch (type) {
     case MBV_U32:
     case MBV_S32:
     case MBV_F32:
-        return 2u;
+        return MBMAP_MAX_POINT_REGISTERS;
     default:
         return 1u;
     }
 }
 
-static void decode_point(const mbpoint_t *p, const uint16_t *regs,
-                         const uint8_t *bits, mbval_t *v)
+static void decode_point(const mbpoint_t *point, const uint16_t *registers,
+                         mbval_t *value)
 {
-    v->valid = 1u;
-    v->type = p->type;
-    v->timestamp = (uint32_t)xTaskGetTickCount();
+    value->valid = 1u;
+    value->type = point->type;
+    value->timestamp = (uint32_t)xTaskGetTickCount();
 
-    switch (p->type) {
-    case MBV_BIT:
-        if ((p->table == MBT_COIL) || (p->table == MBT_DISCRETE)) {
-            v->raw_u = (bits != NULL) ? (uint32_t)(bits[0] & 1u) : 0u;
-        } else {
-            v->raw_u = (regs != NULL) ? (uint32_t)mbcodec_get_bit(regs[0], p->bit)
-                                      : 0u;
-        }
-        v->raw_i = (int32_t)v->raw_u;
-        v->eng = (float)v->raw_u;
-        break;
-
+    switch (point->type) {
     case MBV_U16:
-        v->raw_u = (uint32_t)mbcodec_get_u16(regs);
-        v->raw_i = (int32_t)(int16_t)v->raw_u;
-        v->eng = mbcodec_scale((int32_t)v->raw_u, p->scale, p->offset);
+        value->raw_unsigned = mbcodec_get_u16(registers);
+        value->raw_signed = (int32_t)value->raw_unsigned;
+        value->value = mbcodec_scale_unsigned(value->raw_unsigned,
+                                              point->scale, point->offset);
         break;
 
     case MBV_S16:
-        v->raw_i = (int32_t)mbcodec_get_s16(regs);
-        v->raw_u = (uint32_t)v->raw_i;
-        v->eng = mbcodec_scale(v->raw_i, p->scale, p->offset);
+        value->raw_unsigned = mbcodec_get_u16(registers);
+        value->raw_signed = mbcodec_get_s16(registers);
+        value->value = mbcodec_scale(value->raw_signed,
+                                     point->scale, point->offset);
         break;
 
     case MBV_U32:
-        v->raw_u = mbcodec_get_u32(regs, p->word_order);
-        v->raw_i = (int32_t)v->raw_u;
-        v->eng = ((float)v->raw_u * scale_or_one(p->scale)) + p->offset;
+        value->raw_unsigned = mbcodec_get_u32(registers, point->word_order);
+        value->raw_signed = (int32_t)value->raw_unsigned;
+        value->value = mbcodec_scale_unsigned(value->raw_unsigned,
+                                              point->scale, point->offset);
         break;
 
     case MBV_S32:
-        v->raw_i = mbcodec_get_s32(regs, p->word_order);
-        v->raw_u = (uint32_t)v->raw_i;
-        v->eng = mbcodec_scale(v->raw_i, p->scale, p->offset);
+        value->raw_unsigned = mbcodec_get_u32(registers, point->word_order);
+        value->raw_signed = mbcodec_get_s32(registers, point->word_order);
+        value->value = mbcodec_scale(value->raw_signed,
+                                     point->scale, point->offset);
         break;
 
     case MBV_F32:
-        v->raw_u = mbcodec_get_u32(regs, p->word_order);
-        v->raw_i = (int32_t)v->raw_u;
-        v->eng = (mbcodec_get_f32(regs, p->word_order) *
-                  scale_or_one(p->scale)) + p->offset;
+        value->raw_unsigned = mbcodec_get_u32(registers, point->word_order);
+        value->raw_signed = (int32_t)value->raw_unsigned;
+        value->value = (mbcodec_get_f32(registers, point->word_order) *
+                        point->scale) + point->offset;
         break;
 
     default:
-        v->valid = 0u;
-        v->raw_i = 0;
-        v->raw_u = 0u;
-        v->eng = 0.0f;
+        value->valid = 0u;
+        value->type = point->type;
+        value->raw_signed = 0;
+        value->raw_unsigned = 0u;
+        value->value = 0.0f;
         break;
+    }
+
+    if (!mbcodec_is_finite(value->value)) {
+        value->valid = 0u;
     }
 }
 
-static void encode_point(const mbpoint_t *p, float eng,
-                         uint16_t *regs, uint8_t *bits)
+static int encode_point(const mbpoint_t *point, float value,
+                        uint16_t *registers)
 {
-    float sc = scale_or_one(p->scale);
-
-    switch (p->type) {
-    case MBV_BIT:
-        if ((p->table == MBT_COIL) || (p->table == MBT_DISCRETE)) {
-            bits[0] = ((eng > 0.0f) || (eng < 0.0f)) ? 1u : 0u;
-        } else {
-            regs[0] = mbcodec_set_bit(regs[0], p->bit,
-                                      ((eng > 0.0f) || (eng < 0.0f)) ? 1u : 0u);
-        }
-        break;
-
+    switch (point->type) {
     case MBV_U16: {
-        int32_t raw = mbcodec_unscale(eng, p->scale, p->offset);
+        int32_t raw = mbcodec_unscale(value, point->scale, point->offset);
+
         if (raw < 0) {
             raw = 0;
-        } else if (raw > 65535) {
-            raw = 65535;
+        } else if (raw > (int32_t)UINT16_MAX) {
+            raw = (int32_t)UINT16_MAX;
         }
-        mbcodec_put_u16(regs, (uint16_t)raw);
-        break;
+        mbcodec_put_u16(registers, (uint16_t)raw);
+        return MBTCP_OK;
     }
 
     case MBV_S16: {
-        int32_t raw = mbcodec_unscale(eng, p->scale, p->offset);
-        if (raw < -32768) {
-            raw = -32768;
-        } else if (raw > 32767) {
-            raw = 32767;
+        int32_t raw = mbcodec_unscale(value, point->scale, point->offset);
+
+        if (raw < INT16_MIN) {
+            raw = INT16_MIN;
+        } else if (raw > INT16_MAX) {
+            raw = INT16_MAX;
         }
-        mbcodec_put_s16(regs, (int16_t)raw);
-        break;
+        mbcodec_put_s16(registers, (int16_t)raw);
+        return MBTCP_OK;
     }
 
-    case MBV_U32: {
-        float f = (eng - p->offset) / sc;
-        uint32_t raw;
-
-        if (is_nan_f32(f)) {
-            raw = 0u;
-        } else if (f <= 0.0f) {
-            raw = 0u;
-        } else if (f >= 4294967295.0f) {
-            raw = 0xFFFFFFFFu;
-        } else {
-            raw = (uint32_t)(f + 0.5f);
-        }
-        mbcodec_put_u32(regs, raw, p->word_order);
-        break;
-    }
+    case MBV_U32:
+        mbcodec_put_u32(registers,
+                        mbcodec_unscale_unsigned(value, point->scale,
+                                                 point->offset),
+                        point->word_order);
+        return MBTCP_OK;
 
     case MBV_S32:
-        mbcodec_put_s32(regs, mbcodec_unscale(eng, p->scale, p->offset),
-                        p->word_order);
-        break;
+        mbcodec_put_s32(registers,
+                        mbcodec_unscale(value, point->scale, point->offset),
+                        point->word_order);
+        return MBTCP_OK;
 
-    case MBV_F32:
-        mbcodec_put_f32(regs, (eng - p->offset) / sc, p->word_order);
-        break;
+    case MBV_F32: {
+        float raw = (value - point->offset) / point->scale;
+
+        if (!mbcodec_is_finite(raw)) {
+            return MBTCP_EINVAL;
+        }
+        mbcodec_put_f32(registers, raw, point->word_order);
+        return MBTCP_OK;
+    }
 
     default:
-        break;
+        return MBTCP_EINVAL;
     }
 }
 
-static void invalidate_group(mbmap_t *m, uint8_t group_id)
+static int group_index(const mbmap_t *map, uint8_t group_id)
 {
-    uint16_t i;
+    uint16_t index;
 
-    for (i = 0u; i < m->point_count; i++) {
-        if ((m->points[i].group == group_id) && (m->cache != NULL)) {
-            m->cache[i].valid = 0u;
+    for (index = 0u; index < map->group_count; index++) {
+        if (map->groups[index].id == group_id) {
+            return (int)index;
+        }
+    }
+    return -1;
+}
+
+static int point_fits_group(const mbpoint_t *point, const mbgroup_t *group)
+{
+    uint32_t point_end = (uint32_t)point->address +
+                         register_count(point->type);
+    uint32_t group_end = (uint32_t)group->address + group->quantity;
+
+    return (point->address >= group->address) && (point_end <= group_end);
+}
+
+static void invalidate_group(mbmap_t *map, uint8_t group_id)
+{
+    uint16_t index;
+
+    for (index = 0u; index < map->point_count; index++) {
+        if (map->points[index].group == group_id) {
+            map->cache[index].valid = 0u;
         }
     }
 }
 
-int mbmap_init(mbmap_t *m, const mbpoint_t *points, uint16_t point_count,
+int mbmap_init(mbmap_t *map, const mbpoint_t *points, uint16_t point_count,
                mbgroup_t *groups, uint16_t group_count, mbval_t *cache)
 {
-    uint16_t i;
-    uint16_t j;
+    uint16_t index;
+    uint16_t other;
 
-    if ((m == NULL) || (points == NULL) || (point_count == 0u) ||
+    if ((map == NULL) || (points == NULL) || (point_count == 0u) ||
         (cache == NULL)) {
         return MBTCP_EINVAL;
     }
@@ -206,417 +190,345 @@ int mbmap_init(mbmap_t *m, const mbpoint_t *points, uint16_t point_count,
         return MBTCP_EINVAL;
     }
 
-    for (i = 0u; i < point_count; i++) {
-        if ((points[i].table > MBT_DISCRETE) ||
-            (points[i].type > MBV_BIT) ||
-            (points[i].access > MBA_WO) ||
-            (points[i].word_order > MBW_LO_HI)) {
+    for (index = 0u; index < group_count; index++) {
+        if ((groups[index].id == 0u) ||
+            (groups[index].quantity == 0u) ||
+            (groups[index].quantity > MBMAP_MAX_REGISTERS) ||
+            (groups[index].period_ms == 0u) ||
+            (((uint32_t)groups[index].address +
+              (uint32_t)groups[index].quantity) > MBMAP_ADDRESS_SPACE)) {
             return MBTCP_EINVAL;
         }
-        if (is_nonfinite_f32(points[i].scale) ||
-            is_nonfinite_f32(points[i].offset) ||
-            is_nonfinite_f32(points[i].min) ||
-            is_nonfinite_f32(points[i].max)) {
-            return MBTCP_EINVAL;
-        }
-        if ((points[i].type == MBV_BIT) && (points[i].bit > 15u)) {
-            return MBTCP_EINVAL;
-        }
-        if (((points[i].table == MBT_COIL) ||
-             (points[i].table == MBT_DISCRETE)) &&
-            (points[i].type != MBV_BIT)) {
-            return MBTCP_EINVAL;
-        }
-        if (((points[i].table == MBT_INPUT) ||
-             (points[i].table == MBT_DISCRETE)) &&
-            (points[i].access != MBA_RO)) {
-            return MBTCP_EINVAL;
-        }
-        if (points[i].group != 0u) {
-            const mbgroup_t *g = NULL;
-            uint16_t qty = point_regs(&points[i]);
 
-            for (j = 0u; j < group_count; j++) {
-                if (groups[j].id == points[i].group) {
-                    g = &groups[j];
+        for (other = (uint16_t)(index + 1u); other < group_count; other++) {
+            if (groups[index].id == groups[other].id) {
+                return MBTCP_EINVAL;
+            }
+        }
+    }
+
+    for (index = 0u; index < point_count; index++) {
+        const mbpoint_t *point = &points[index];
+        uint16_t count;
+
+        if ((point->name == NULL) || (point->name[0] == '\0') ||
+            (point->type > MBV_F32) ||
+            (point->access > MBA_WO) ||
+            (point->word_order > MBW_LO_HI) ||
+            (point->scale == 0.0f) ||
+            !mbcodec_is_finite(point->scale) ||
+            !mbcodec_is_finite(point->offset) ||
+            !mbcodec_is_finite(point->minimum) ||
+            !mbcodec_is_finite(point->maximum)) {
+            return MBTCP_EINVAL;
+        }
+
+        if ((point->access != MBA_RO) &&
+            (point->minimum >= point->maximum)) {
+            return MBTCP_EINVAL;
+        }
+
+        count = register_count(point->type);
+        if (((uint32_t)point->address + (uint32_t)count) > MBMAP_ADDRESS_SPACE) {
+            return MBTCP_EINVAL;
+        }
+
+        if (point->group != MBMAP_NO_GROUP) {
+            int group = -1;
+
+            for (other = 0u; other < group_count; other++) {
+                if (groups[other].id == point->group) {
+                    group = (int)other;
                     break;
                 }
             }
-            if ((g == NULL) || (g->table != points[i].table) ||
-                (points[i].addr < g->rd_addr) ||
-                (((uint32_t)points[i].addr + (uint32_t)qty) >
-                 ((uint32_t)g->rd_addr + (uint32_t)g->rd_qty))) {
+            if ((group < 0) || !point_fits_group(point, &groups[group])) {
                 return MBTCP_EINVAL;
             }
         }
-    }
-    for (i = 0u; i < group_count; i++) {
-        uint16_t max_qty;
 
-        if ((groups[i].id == 0u) ||
-            (groups[i].table > MBT_DISCRETE) ||
-            (groups[i].rd_qty == 0u)) {
-            return MBTCP_EINVAL;
-        }
-        max_qty = ((groups[i].table == MBT_HOLDING) ||
-                   (groups[i].table == MBT_INPUT))
-                      ? MBMAP_MAX_REGS
-                      : MBMAP_MAX_BITS;
-        if (groups[i].rd_qty > max_qty) {
-            return MBTCP_EINVAL;
-        }
-        for (j = (uint16_t)(i + 1u); j < group_count; j++) {
-            if (groups[i].id == groups[j].id) {
+        for (other = 0u; other < index; other++) {
+            if ((points[other].name != NULL) &&
+                (strcmp(points[other].name, point->name) == 0)) {
                 return MBTCP_EINVAL;
             }
         }
     }
 
-    m->points = points;
-    m->point_count = point_count;
-    m->groups = groups;
-    m->group_count = group_count;
-    m->cache = cache;
+    map->points = points;
+    map->point_count = point_count;
+    map->groups = groups;
+    map->group_count = group_count;
+    map->cache = cache;
 
     memset(cache, 0, (size_t)point_count * sizeof(mbval_t));
 
-    for (i = 0u; i < group_count; i++) {
-        groups[i].next_tick = 0u;       /* primeiro tick le todos */
+    for (index = 0u; index < group_count; index++) {
+        groups[index].next_tick = 0u;   /* o primeiro tick le todos */
     }
 
     return MBTCP_OK;
 }
 
-int mbmap_id(const mbmap_t *m, const char *name)
+int mbmap_id(const mbmap_t *map, const char *name)
 {
-    uint16_t i;
+    uint16_t index;
 
-    if ((m == NULL) || (name == NULL)) {
+    if ((map == NULL) || (map->points == NULL) || (name == NULL)) {
         return -1;
     }
 
-    for (i = 0u; i < m->point_count; i++) {
-        if ((m->points[i].name != NULL) &&
-            (strcmp(m->points[i].name, name) == 0)) {
-            return (int)i;
+    for (index = 0u; index < map->point_count; index++) {
+        if ((map->points[index].name != NULL) &&
+            (strcmp(map->points[index].name, name) == 0)) {
+            return (int)index;
         }
     }
     return -1;
 }
 
-int mbmap_read(mbmap_t *m, uint16_t id, mbval_t *out)
+int mbmap_read(mbmap_t *map, uint16_t point_id, mbval_t *out)
 {
-    const mbpoint_t *p;
-    mbval_t v;
+    const mbpoint_t *point;
+    uint16_t registers[MBMAP_MAX_POINT_REGISTERS] = { 0u, 0u };
+    mbval_t value;
     int rc;
 
-    if ((m == NULL) || (m->points == NULL) || (m->cache == NULL) ||
-        (id >= m->point_count)) {
+    if ((map == NULL) || (map->points == NULL) || (map->cache == NULL) ||
+        (point_id >= map->point_count)) {
         return MBTCP_EINVAL;
     }
 
-    p = &m->points[id];
-    if (p->access == MBA_WO) {
+    point = &map->points[point_id];
+    if (point->access == MBA_WO) {
         return MBTCP_EINVAL;
     }
 
-    if ((p->table == MBT_HOLDING) || (p->table == MBT_INPUT)) {
-        uint16_t regs[2] = { 0u, 0u };
-        uint16_t qty = point_regs(p);
-
-        if (p->table == MBT_HOLDING) {
-            rc = mbtcp_read_holding(p->addr, qty, regs);
-        } else {
-            rc = mbtcp_read_input(p->addr, qty, regs);
-        }
-        if (rc != MBTCP_OK) {
-            return rc;
-        }
-        decode_point(p, regs, NULL, &v);
-    } else if ((p->table == MBT_COIL) || (p->table == MBT_DISCRETE)) {
-        uint8_t bits[1] = { 0u };
-
-        if (p->table == MBT_COIL) {
-            rc = mbtcp_read_coils(p->addr, 1u, bits);
-        } else {
-            rc = mbtcp_read_discrete_inputs(p->addr, 1u, bits);
-        }
-        if (rc != MBTCP_OK) {
-            return rc;
-        }
-        decode_point(p, NULL, bits, &v);
-    } else {
-        return MBTCP_EINVAL;
+    rc = mbtcp_read_holding(point->address, register_count(point->type),
+                            registers);
+    if (rc != MBTCP_OK) {
+        map->cache[point_id].valid = 0u;
+        return rc;
     }
 
-    m->cache[id] = v;
+    decode_point(point, registers, &value);
+    map->cache[point_id] = value;
     if (out != NULL) {
-        *out = v;
+        *out = value;
     }
     return MBTCP_OK;
 }
 
-int mbmap_write(mbmap_t *m, uint16_t id, float eng)
+int mbmap_write(mbmap_t *map, uint16_t point_id, float value)
 {
-    const mbpoint_t *p;
-    mbval_t v;
+    const mbpoint_t *point;
+    uint16_t registers[MBMAP_MAX_POINT_REGISTERS] = { 0u, 0u };
+    uint16_t register_total;
     int rc;
 
-    if ((m == NULL) || (m->points == NULL) || (m->cache == NULL) ||
-        (id >= m->point_count)) {
+    if ((map == NULL) || (map->points == NULL) || (map->cache == NULL) ||
+        (point_id >= map->point_count)) {
         return MBTCP_EINVAL;
     }
 
-    p = &m->points[id];
-    if (p->access == MBA_RO) {
+    point = &map->points[point_id];
+    if (point->access == MBA_RO) {
         return MBTCP_EINVAL;
     }
-    if (is_nonfinite_f32(eng)) {
+    if (!mbcodec_is_finite(value)) {
         return MBTCP_EINVAL;
     }
-    if ((p->min < p->max) && ((eng < p->min) || (eng > p->max))) {
+    if ((value < point->minimum) || (value > point->maximum)) {
         return MBTCP_EINVAL;
     }
 
-    if (p->table == MBT_HOLDING) {
-        uint16_t regs[2] = { 0u, 0u };
-        uint8_t bits[1] = { 0u };
+    rc = encode_point(point, value, registers);
+    if (rc != MBTCP_OK) {
+        return rc;
+    }
 
-        if (p->type == MBV_BIT) {
-            rc = mbtcp_read_holding(p->addr, 1u, regs);
-            if (rc != MBTCP_OK) {
-                return rc;
-            }
-            encode_point(p, eng, regs, bits);
-            rc = mbtcp_write_register(p->addr, regs[0]);
-        } else {
-            uint16_t qty = point_regs(p);
-            encode_point(p, eng, regs, bits);
-
-            if (qty == 1u) {
-                rc = mbtcp_write_register(p->addr, regs[0]);
-            } else {
-#if MBMAP_USE_FC16
-                rc = mbtcp_write_registers(p->addr, qty, regs);
-#else
-                uint16_t dummy = 0u;
-                rc = mbtcp_read_write_registers(p->addr, 1u, &dummy,
-                                                p->addr, qty, regs);
-#endif
-            }
-        }
-        if (rc != MBTCP_OK) {
-            return rc;
-        }
-        decode_point(p, regs, NULL, &v);
-    } else if (p->table == MBT_COIL) {
-        uint8_t bits[1] = { 0u };
-
-        encode_point(p, eng, NULL, bits);
-        rc = mbtcp_write_coil(p->addr, (int)bits[0]);
-        if (rc != MBTCP_OK) {
-            return rc;
-        }
-        decode_point(p, NULL, bits, &v);
+    register_total = register_count(point->type);
+    if (register_total == 1u) {
+        rc = mbtcp_write_register(point->address, registers[0]);
     } else {
-        /* input/discrete sao somente leitura */
-        return MBTCP_EINVAL;
+        uint16_t ignored_read = 0u;
+
+        /*
+         * O UHX65A nao garante FC16 para os 32 bits de process data.
+         * FC23 le 1 register e escreve os 2 no mesmo endereco.
+         */
+        rc = mbtcp_read_write_registers(point->address, 1u, &ignored_read,
+                                        point->address, register_total,
+                                        registers);
+    }
+    if (rc != MBTCP_OK) {
+        return rc;
     }
 
-    m->cache[id] = v;
+    decode_point(point, registers, &map->cache[point_id]);
     return MBTCP_OK;
 }
 
-int mbmap_read_cached(const mbmap_t *m, uint16_t id, mbval_t *out)
+int mbmap_read_cached(const mbmap_t *map, uint16_t point_id, mbval_t *out)
 {
-    if ((m == NULL) || (m->cache == NULL) || (out == NULL) ||
-        (id >= m->point_count)) {
+    if ((map == NULL) || (map->cache == NULL) || (out == NULL) ||
+        (point_id >= map->point_count)) {
         return MBTCP_EINVAL;
     }
-    *out = m->cache[id];
+    *out = map->cache[point_id];
     return MBTCP_OK;
 }
 
-int mbmap_poll_group(mbmap_t *m, uint8_t group_id)
+int mbmap_poll_group(mbmap_t *map, uint8_t group_id)
 {
-    mbgroup_t *g = NULL;
-    uint16_t i;
-    uint16_t gi;
+    mbgroup_t *group;
+    uint16_t index;
+    int group_position;
     int rc;
 
-    if ((m == NULL) || (m->groups == NULL) || (m->cache == NULL)) {
+    if ((map == NULL) || (map->points == NULL) || (map->groups == NULL) ||
+        (map->cache == NULL)) {
         return MBTCP_EINVAL;
     }
 
-    for (gi = 0u; gi < m->group_count; gi++) {
-        if (m->groups[gi].id == group_id) {
-            g = &m->groups[gi];
-            break;
-        }
-    }
-    if (g == NULL) {
+    group_position = group_index(map, group_id);
+    if (group_position < 0) {
         return MBTCP_EINVAL;
     }
+    group = &map->groups[group_position];
 
-    if ((g->table == MBT_HOLDING) || (g->table == MBT_INPUT)) {
-        if ((g->rd_qty == 0u) || (g->rd_qty > MBMAP_MAX_REGS)) {
-            return MBTCP_EINVAL;
-        }
+    rc = mbtcp_read_holding(group->address, group->quantity, s_registers);
+    if (rc != MBTCP_OK) {
+        invalidate_group(map, group_id);
+        return rc;
+    }
 
-        if (g->table == MBT_HOLDING) {
-            rc = mbtcp_read_holding(g->rd_addr, g->rd_qty, s_regs);
-        } else {
-            rc = mbtcp_read_input(g->rd_addr, g->rd_qty, s_regs);
-        }
-        if (rc != MBTCP_OK) {
-            invalidate_group(m, group_id);
-            return rc;
-        }
+    for (index = 0u; index < map->point_count; index++) {
+        const mbpoint_t *point = &map->points[index];
+        uint16_t offset;
 
-        for (i = 0u; i < m->point_count; i++) {
-            const mbpoint_t *p = &m->points[i];
-            uint16_t qty;
-            uint16_t off;
-
-            if ((p->group != group_id) || (p->table != g->table)) {
-                continue;
-            }
-            qty = point_regs(p);
-            if (p->addr < g->rd_addr) {
-                continue;
-            }
-            off = (uint16_t)(p->addr - g->rd_addr);
-            if (((uint32_t)off + (uint32_t)qty) > (uint32_t)g->rd_qty) {
-                continue;
-            }
-            decode_point(p, &s_regs[off], NULL, &m->cache[i]);
+        if (point->group != group_id) {
+            continue;
         }
-    } else if ((g->table == MBT_COIL) || (g->table == MBT_DISCRETE)) {
-        if ((g->rd_qty == 0u) || (g->rd_qty > MBMAP_MAX_BITS)) {
-            return MBTCP_EINVAL;
+        if (!point_fits_group(point, group)) {
+            continue;
         }
 
-        if (g->table == MBT_COIL) {
-            rc = mbtcp_read_coils(g->rd_addr, g->rd_qty, s_bits);
-        } else {
-            rc = mbtcp_read_discrete_inputs(g->rd_addr, g->rd_qty, s_bits);
-        }
-        if (rc != MBTCP_OK) {
-            invalidate_group(m, group_id);
-            return rc;
-        }
-
-        for (i = 0u; i < m->point_count; i++) {
-            const mbpoint_t *p = &m->points[i];
-            uint16_t off;
-
-            if ((p->group != group_id) || (p->table != g->table)) {
-                continue;
-            }
-            if (p->addr < g->rd_addr) {
-                continue;
-            }
-            off = (uint16_t)(p->addr - g->rd_addr);
-            if (off >= g->rd_qty) {
-                continue;
-            }
-            decode_point(p, NULL, &s_bits[off], &m->cache[i]);
-        }
-    } else {
-        return MBTCP_EINVAL;
+        offset = (uint16_t)(point->address - group->address);
+        decode_point(point, &s_registers[offset], &map->cache[index]);
     }
 
     return MBTCP_OK;
 }
 
-int mbmap_tick(mbmap_t *m)
+int mbmap_tick(mbmap_t *map)
 {
     TickType_t now;
-    int first = MBTCP_OK;
-    uint16_t i;
+    int first_error = MBTCP_OK;
+    uint16_t index;
 
-    if ((m == NULL) || (m->groups == NULL) || (m->cache == NULL)) {
+    if ((map == NULL) || (map->points == NULL) || (map->cache == NULL)) {
+        return MBTCP_EINVAL;
+    }
+    if (map->group_count == 0u) {
+        return MBTCP_OK;
+    }
+    if (map->groups == NULL) {
         return MBTCP_EINVAL;
     }
 
     now = xTaskGetTickCount();
 
-    for (i = 0u; i < m->group_count; i++) {
-        mbgroup_t *g = &m->groups[i];
+    for (index = 0u; index < map->group_count; index++) {
+        mbgroup_t *group = &map->groups[index];
 
-        if ((int32_t)((uint32_t)now - g->next_tick) >= 0) {
-            int rc = mbmap_poll_group(m, g->id);
-            uint32_t period = (g->period_ms != 0u) ? g->period_ms : 1u;
+        if ((int32_t)((uint32_t)now - group->next_tick) >= 0) {
+            int rc = mbmap_poll_group(map, group->id);
+            uint32_t period = (uint32_t)pdMS_TO_TICKS(group->period_ms);
 
-            if ((rc != MBTCP_OK) && (first == MBTCP_OK)) {
-                first = rc;
+            if ((rc != MBTCP_OK) && (first_error == MBTCP_OK)) {
+                first_error = rc;
             }
 
-            g->next_tick = (uint32_t)now + (uint32_t)pdMS_TO_TICKS(period);
-            if (g->next_tick == 0u) {
-                g->next_tick = 1u;
+            if (period == 0u) {
+                period = 1u;
+            }
+            group->next_tick = (uint32_t)now + period;
+            if (group->next_tick == 0u) {
+                group->next_tick = 1u;
             }
         }
     }
 
-    return first;
+    return first_error;
 }
 
-int mbmap_wait(mbmap_t *m, uint16_t id, uint32_t mask,
-               uint32_t value, uint32_t timeout_ms)
+int mbmap_wait(mbmap_t *map, uint16_t point_id, uint32_t mask,
+               uint32_t expected, uint32_t timeout_ms)
 {
-    TickType_t start;
+    TickType_t started;
     TickType_t limit;
 
-    if ((m == NULL) || (id >= m->point_count)) {
+    if ((map == NULL) || (map->points == NULL) || (map->cache == NULL) ||
+        (point_id >= map->point_count)) {
         return MBTCP_EINVAL;
     }
 
-    start = xTaskGetTickCount();
+    if (timeout_ms > MBTCP_MAX_TIMEOUT_MS) {
+        timeout_ms = MBTCP_MAX_TIMEOUT_MS;
+    }
+
+    started = xTaskGetTickCount();
     limit = pdMS_TO_TICKS(timeout_ms);
     if ((timeout_ms != 0u) && (limit == 0u)) {
-        limit = 1u;                 /* timeout menor que 1 tick */
+        limit = 1u;
     }
 
     for (;;) {
-        mbval_t v;
-        int rc = mbmap_read(m, id, &v);
+        mbval_t value;
+        int rc = mbmap_read(map, point_id, &value);
 
-        if ((rc == MBTCP_OK) && ((v.raw_u & mask) == value)) {
+        if ((rc == MBTCP_OK) && (value.valid != 0u) &&
+            ((value.raw_unsigned & mask) == expected)) {
             return MBTCP_OK;
         }
 
-        if ((uint32_t)(xTaskGetTickCount() - start) >= (uint32_t)limit) {
+        if ((uint32_t)(xTaskGetTickCount() - started) >=
+            (uint32_t)limit) {
             return MBTCP_ETIMEOUT;
         }
-        vTaskDelay(pdMS_TO_TICKS(10u));
+        vTaskDelay(pdMS_TO_TICKS(MBMAP_WAIT_INTERVAL_MS));
     }
 }
 
-void mbmap_invalidate(mbmap_t *m, uint16_t id)
+void mbmap_invalidate(mbmap_t *map, uint16_t point_id)
 {
-    if ((m != NULL) && (m->cache != NULL) && (id < m->point_count)) {
-        m->cache[id].valid = 0u;
+    if ((map != NULL) && (map->cache != NULL) &&
+        (point_id < map->point_count)) {
+        map->cache[point_id].valid = 0u;
     }
 }
 
-void mbmap_dump(const mbmap_t *m)
+void mbmap_dump(const mbmap_t *map)
 {
-    uint16_t i;
+    uint16_t index;
 
-    if ((m == NULL) || (m->points == NULL) || (m->cache == NULL)) {
+    if ((map == NULL) || (map->points == NULL) || (map->cache == NULL)) {
         return;
     }
 
-    for (i = 0u; i < m->point_count; i++) {
-        const mbval_t *v = &m->cache[i];
+    for (index = 0u; index < map->point_count; index++) {
+        const mbval_t *value = &map->cache[index];
 
-        if (v->valid == 0u) {
+        if (value->valid == 0u) {
             continue;
         }
-        tcpprobe_log("%-24s raw=%ld/%lu eng=%.3f",
-                     (m->points[i].name != NULL) ? m->points[i].name : "?",
-                     (long)v->raw_i, (unsigned long)v->raw_u,
-                     (double)v->eng);
+        tcpprobe_log("%-24s raw=%ld/%lu value=%.3f",
+                     (map->points[index].name != NULL)
+                         ? map->points[index].name
+                         : "?",
+                     (long)value->raw_signed,
+                     (unsigned long)value->raw_unsigned,
+                     (double)value->value);
     }
 }

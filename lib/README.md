@@ -1,23 +1,36 @@
-# lib/ - TCP probe + cliente Modbus TCP + mapa de pontos
+# lib/ - cliente Modbus TCP + mapa de pontos
 
-Bibliotecas pequenas sobre FreeRTOS-Plus-TCP, sem lwIP, sem HAL e sem
-task permanente.
+Bibliotecas pequenas sobre FreeRTOS-Plus-TCP, sem lwIP, sem HAL e sem task permanente.
 
 ```
 lib/
 ├── tcpprobe/
 │   ├── tcpprobe.h / tcpprobe.c
 │   ├── tcpprobe.mk
-│   └── example.c              (S0, nao compilado)
+│   └── example.c              (exemplo, não compilado)
 └── mbtcp/
-    ├── mbtcp.h / mbtcp.c      transporte Modbus TCP (todas as FCs)
-    ├── mbtcp_codec.h / .c     registro <-> valor (puro C, testavel no PC)
+    ├── mbtcp.h / mbtcp.c      transporte Modbus TCP (FC03/06/16/23 + PDU cru)
+    ├── mbtcp_codec.h / .c     registro <-> valor (puro C, testável no PC)
     ├── mbtcp_map.h / .c       tabela de pontos, cache e poll
-    ├── mbtcp_demo.c           exemplo UHX65A + autoteste (nao compilado)
+    ├── mbtcp_demo.c           exemplo UHX65A (não compilado)
     └── mbtcp.mk
 ```
 
-## Integracao no Makefile
+## Perfil alvo
+
+O cliente e o mapa foram simplificados para o perfil **SEW UHX65A**:
+
+- Unit ID `0`
+- Offset `0`
+- FC03: leitura de holding registers
+- FC06: escrita de um holding register
+- FC23: leitura e escrita na mesma transação (usada para valores de 32 bits)
+- FC16: mantida apenas por compatibilidade (`mbtcp_write_multi`); o UHX65A não garante FC16
+- PDU cru: escape hatch para function codes não cobertas pela API
+
+O layout real de process data (quais palavras são controle, status, setpoint e posição/velocidade real) vem do MOVISUITE/MOVIKIT. Ajuste `address`, `type`, `scale` e `word_order` na tabela de pontos antes de qualquer escrita no equipamento real.
+
+## Integração no Makefile
 
 Depois de `C_SOURCES` e `C_INCLUDES`:
 
@@ -26,322 +39,319 @@ include lib/tcpprobe/tcpprobe.mk
 include lib/mbtcp/mbtcp.mk
 ```
 
-`mbtcp.mk` adiciona `mbtcp.c`, `mbtcp_codec.c` e `mbtcp_map.c`, alem de
-`-Ilib/mbtcp -Ilib/tcpprobe`. `mbtcp_demo.c` **nao** e' compilado.
+`mbtcp.mk` adiciona `mbtcp.c`, `mbtcp_codec.c` e `mbtcp_map.c`, além de `-Ilib/mbtcp -Ilib/tcpprobe`. `mbtcp_demo.c` **não** é compilado.
 
-## Configuracao e ciclo de vida
-
-```c
-mbtcp_cfg_t cfg;
-
-mbtcp_cfg_default(&cfg);       /* port 502, unit 0 (UHX65A) */
-cfg.ip = "192.168.10.4";       /* ajuste para a rede real        */
-cfg.port = 502;
-cfg.unit = 0;
-cfg.timeout_ms = 500;
-cfg.retries_read = 1;          /* leitura pode repetir           */
-cfg.retries_write = 0;         /* escrita NAO repete por default */
-
-if (mbtcp_init(&cfg) == MBTCP_OK) {
-    mbtcp_connect();           /* opcional: a 1a transacao conecta */
-}
-
-/* ... usa a API ... */
-
-mbtcp_disconnect();
-```
-
-`mbtcp_init()` apenas configura; nao abre socket. `mbtcp_connect()` abre
-agora. Se a rede cair, a proxima transacao reconecta sozinha.
+## Uso rápido
 
 ```c
-int mbtcp_init(const mbtcp_cfg_t *cfg);
-int mbtcp_connect(void);
-void mbtcp_disconnect(void);
-int mbtcp_set_unit(uint8_t unit);
-const mbtcp_stats_t *mbtcp_stats(void);
-```
+#include "mbtcp.h"
+#include "mbtcp_map.h"
 
-`mbtcp_stats_t` traz contadores de TX/RX, timeouts, excecoes, erros de
-frame, conexoes, retries e latencia da ultima transacao.
+#include "FreeRTOS.h"
+#include "task.h"
 
-## API de function codes
-
-Todas usam o `unit` configurado em `mbtcp_init()`.
-
-| FC | Funcao |
-| --- | --- |
-| 01 | `mbtcp_read_coils(addr, qty, bits)` |
-| 02 | `mbtcp_read_discrete_inputs(addr, qty, bits)` |
-| 03 | `mbtcp_read_holding(addr, qty, regs)` |
-| 04 | `mbtcp_read_input(addr, qty, regs)` |
-| 05 | `mbtcp_write_coil(addr, on)` |
-| 06 | `mbtcp_write_register(addr, value)` |
-| 15 | `mbtcp_write_coils(addr, qty, bits)` |
-| 16 | `mbtcp_write_registers(addr, qty, regs)` |
-| 20 | `mbtcp_read_file_record(file, record, qty, regs)` |
-| 21 | `mbtcp_write_file_record(file, record, qty, regs)` |
-| 22 | `mbtcp_mask_write_register(addr, and_mask, or_mask)` |
-| 23 | `mbtcp_read_write_registers(raddr, rqty, rout, waddr, wqty, win)` |
-| 24 | `mbtcp_read_fifo(addr, out, cap, &count)` |
-| 43/14 | `mbtcp_read_device_id(category, cb, ctx)` / `mbtcp_read_device_id_obj(category, obj, cb, ctx)` |
-
-Para qualquer FC fora dessa lista (inclusive FCs seriais atras de um
-gateway), use o PDU cru:
-
-```c
-uint8_t pdu[8] = { 0x08, /* ... */ };
-uint8_t rsp[253];
-uint16_t rsp_len;
-int rc = mbtcp_raw_pdu(pdu, sizeof(pdu), rsp, sizeof(rsp), &rsp_len);
-```
-
-O PDU de resposta inclui o function code em `rsp[0]`. Excecao Modbus
-retorna `MBTCP_EEXCEPTION`; o codigo fica em `mbtcp_last_exception()`.
-
-### Compatibilidade com a versao anterior
-
-Continuam existindo:
-
-```c
-int  mbtcp_open(const char *ip, uint16_t port, uint32_t timeout_ms);
-void mbtcp_close(void);
-int  mbtcp_read(uint8_t unit, uint8_t fc, uint16_t addr, uint16_t qty,
-                uint16_t *out);
-int  mbtcp_write(uint8_t unit, uint16_t addr, uint16_t value);
-int  mbtcp_write_multi(uint8_t unit, uint16_t addr, uint16_t qty,
-                       const uint16_t *values);
-```
-
-`mbtcp_write_multi()` usa FC16. O UHX65A **nao** garante FC16; para ele
-use `mbtcp_read_write_registers()` (FC23) ou o mapa.
-
-## Perfil SEW UHX65A
-
-Premissas adotadas (confirmar no manual/MOVISUITE da maquina):
-
-- unit ID **0**;
-- offset de process data **0**;
-- FCs **03, 06 e 23**;
-- ate **120 palavras** de process data;
-- FC16/FC05/FC15/FC43 nao sao assumidas.
-
-O primeiro eixo de exemplo comeca em **1**. O mapa abaixo usa 8 PD por
-eixo (modo Positioning):
-
-| Eixo | Palavras | Conteudo de exemplo |
-| --- | --- | --- |
-| 1 | 1..8 | control, status, setpoint S32, actual S32, reservado |
-| 2 | 9..16 | control, status, setpoint S32, actual S32, reservado |
-
-O layout real depende dos modulos MOVIKIT e do mapeamento de process
-data feito no MOVISUITE. Ajuste `addr`, `type`, `scale` e `word_order` na
-tabela; o transporte nao muda.
-
-### Escrita de 32 bits no UHX65A
-
-Com `MBMAP_USE_FC16=0` (default), o mapa escreve valores de 2 registradores
-com **FC23**: le 1 registrador e escreve 2 no mesmo endereco, em uma unica
-transacao. Para escravos que suportam FC16, compile com
-`-DMBMAP_USE_FC16=1`.
-
-O control word e' tratado como um ponto `U16` inteiro. Nao use
-read-modify-write de bit no control word durante operacao.
-
-## Mapa de pontos
-
-A tabela fica no projeto da aplicacao (nao no `lib/`). Exemplo:
-
-```c
-enum { A1_CTRL, A1_STATUS, A1_SETPOINT, A1_ACTUAL, P_COUNT };
-
-static const mbpoint_t points[P_COUNT] = {
-    /* nome          addr table       type     access   word      bit grp per scale off min max */
-    { "a1.control",   1, MBT_HOLDING, MBV_U16, MBA_RW, MBW_HI_LO, 0, 1, 20, 1.0f, 0.0f, 0.0f, 65535.0f },
-    { "a1.status",    2, MBT_HOLDING, MBV_U16, MBA_RO, MBW_HI_LO, 0, 1, 20, 1.0f, 0.0f, 0.0f, 0.0f },
-    { "a1.setpoint",  3, MBT_HOLDING, MBV_S32, MBA_RW, MBW_HI_LO, 0, 1, 20, 1.0f, 0.0f, -1000000.0f, 1000000.0f },
-    { "a1.actual",    5, MBT_HOLDING, MBV_S32, MBA_RO, MBW_HI_LO, 0, 1, 20, 1.0f, 0.0f, 0.0f, 0.0f },
+enum {
+    POINT_AXIS1_CONTROL = 0,
+    POINT_AXIS1_STATUS,
+    POINT_AXIS1_POSITION_SETPOINT,
+    POINT_AXIS1_POSITION_ACTUAL,
+    POINT_COUNT
 };
 
-static mbgroup_t groups[] = {
-    { 1, MBT_HOLDING, 1, 8, 20, 0 },   /* id, tabela, addr, qty, periodo */
+static const mbpoint_t g_points[POINT_COUNT] = {
+    [POINT_AXIS1_CONTROL] = {
+        .name = "axis1.control",
+        .address = 1,
+        .type = MBV_U16,
+        .access = MBA_RW,
+        .word_order = MBW_HI_LO,
+        .group = 1,
+        .scale = 1.0f,
+        .offset = 0.0f,
+        .minimum = 0.0f,
+        .maximum = 65535.0f,
+    },
+    [POINT_AXIS1_STATUS] = {
+        .name = "axis1.status",
+        .address = 2,
+        .type = MBV_U16,
+        .access = MBA_RO,
+        .word_order = MBW_HI_LO,
+        .group = 1,
+        .scale = 1.0f,
+        .offset = 0.0f,
+    },
+    [POINT_AXIS1_POSITION_SETPOINT] = {
+        .name = "axis1.position_setpoint",
+        .address = 3,
+        .type = MBV_S32,
+        .access = MBA_RW,
+        .word_order = MBW_HI_LO,
+        .group = 1,
+        .scale = 1.0f,
+        .offset = 0.0f,
+        .minimum = -1000000.0f,
+        .maximum = 1000000.0f,
+    },
+    [POINT_AXIS1_POSITION_ACTUAL] = {
+        .name = "axis1.position_actual",
+        .address = 5,
+        .type = MBV_S32,
+        .access = MBA_RO,
+        .word_order = MBW_HI_LO,
+        .group = 1,
+        .scale = 1.0f,
+        .offset = 0.0f,
+    },
 };
 
-static mbval_t cache[P_COUNT];
-static mbmap_t map;
+static mbgroup_t g_groups[] = {
+    { .id = 1, .address = 1, .quantity = 8, .period_ms = 20 },
+};
 
-mbmap_init(&map, points, P_COUNT, groups, 1, cache);
-```
+static mbval_t g_cache[POINT_COUNT];
+static mbmap_t g_map;
 
-Macros:
+void modbus_task(void *argument)
+{
+    mbtcp_cfg_t cfg;
 
-- tabela: `MBT_HOLDING`, `MBT_INPUT`, `MBT_COIL`, `MBT_DISCRETE`;
-- tipo: `MBV_U16`, `MBV_S16`, `MBV_U32`, `MBV_S32`, `MBV_F32`, `MBV_BIT`;
-- acesso: `MBA_RO`, `MBA_RW`, `MBA_WO`;
-- ordem de 32 bits: `MBW_HI_LO` (AB CD) ou `MBW_LO_HI` (CD AB).
+    (void)argument;
 
-Uso:
+    mbtcp_cfg_default(&cfg);
+    cfg.ip = "192.168.10.4";   /* IP do UHX65A ou do simulador */
+    cfg.port = 502;            /* 502 no UHX65A; 1502 no simulador */
+    cfg.unit = 0;              /* UHX65A: 0 */
+    cfg.timeout_ms = 800;
+    cfg.retries_read = 1;
 
-```c
-int id = mbmap_id(&map, "a1.actual");
-mbval_t v;
-
-mbmap_read(&map, id, &v);              /* le agora e atualiza o cache */
-mbmap_read_cached(&map, id, &v);       /* so copia o cache           */
-
-mbmap_write(&map, mbmap_id(&map, "a1.setpoint"), 1234.0f);
-
-mbmap_poll_group(&map, 1);             /* le o bloco 1..8 em uma FC3 */
-mbmap_dump(&map);                      /* loga os pontos validos     */
-
-mbmap_wait(&map, id, 0x0001u, 0x0001u, 2000);
-```
-
-`min < max` valida a escrita em valor de engenharia. `scale`/`offset`
-convertem `eng = raw * scale + offset`. Bit dentro de registrador
-(`MBV_BIT` em `MBT_HOLDING`) usa read-modify-write com FC03+FC06; nao e'
-atomico.
-
-### Task de processo
-
-O mapa nao cria task. Copie esta ideia para uma task que ja existe:
-
-```c
-for (;;) {
-    int rc = mbmap_tick(&map);         /* poll dos grupos vencidos */
-
-    if (rc != MBTCP_OK) {
-        /* nao pare o loop: a proxima volta reconecta */
-        tcpprobe_log("modbus: %s", mbtcp_strerror(rc));
+    if (mbtcp_init(&cfg) != MBTCP_OK) {
+        return;
+    }
+    if (mbmap_init(&g_map, g_points, POINT_COUNT, g_groups, 1, g_cache) != MBTCP_OK) {
+        return;
     }
 
-    {
-        mbval_t v;
-        if (mbmap_read_cached(&map, A1_ACTUAL, &v) == MBTCP_OK && v.valid) {
-            /* publica no MQTT / atualiza estado */
+    for (;;) {
+        int rc = mbmap_tick(&g_map);
+        if (rc != MBTCP_OK) {
+            /* logar e manter telemetria anterior inválida/antiga conforme política */
         }
-    }
 
-    vTaskDelay(pdMS_TO_TICKS(10));
+        /* escrita de posição: ver seção "Fluxo para escrever posição" */
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
 }
 ```
 
-O periodo de cada grupo (`period_ms`) e' o minimo; a cadencia real
-depende de com que frequencia a task chama `mbmap_tick()`. Chamar a cada
-10..20 ms e' suficiente. Nao ha task, fila nem comando interno escondido.
+**Importante:** `mbtcp_init`/`mbtcp_connect`/leituras/escritas podem bloquear por timeout/rede. Nunca chame essas funções do callback do MQTT; use uma task de processo e uma fila/comando para pedir a escrita.
 
-### Concorrencia e bloqueio
+## Fluxo para escrever posição (Modbus TCP)
 
-- As funcoes de `mbtcp.c` sao thread-safe (mutex interno).
-- O mapa usa buffers de scratch estaticos e **nao** e' reentrante. Use
-  `mbmap_tick()`, `mbmap_read()` e `mbmap_write()` em **uma unica task**
-  (a task de processo). Outras tasks devem ler o cache com
-  `mbmap_read_cached()` ou enviar comandos por uma fila para a task de
-  processo.
-- `mbmap_tick()`, `mbmap_read()` e `mbmap_write()` bloqueiam durante a
-  transacao. Com a rede caida, o pior caso e' aproximadamente
-  `timeout_ms` por grupo. Nunca chame do callback do MQTT, de timer ou
-  de callback de interrupcao.
-- `mbtcp_connect()` e `mbtcp_disconnect()` tambem bloqueiam; chame da
-  task de processo.
+Exemplo: escrever `125` no setpoint de posição do eixo 1 (`POINT_AXIS1_POSITION_SETPOINT`, endereço `3`, `S32`, `scale = 1.0`, `offset = 0.0`).
 
-## Memoria
+### 1. Aplicação pede a escrita
 
-- transporte: `s_tx[260] + s_rx[260] + s_rsp[253]` = **773 bytes** estaticos;
-- mapa: `s_regs[125]` (250 B) + `s_bits[250]` (250 B) = **500 bytes**;
-- cache: `sizeof(mbval_t)` por ponto (tipicamente 20..24 B);
-- mutex: alocado no heap do FreeRTOS;
-- socket: consome `RX + TX` do heap do FreeRTOS (tipicamente 2 KB + 2 KB).
-
-Se `FreeRTOS_socket()` falhar, veja `tcpprobe_env_dump()` e
-`mbtcp_stats()`. `cfg.rx_buf`/`cfg.tx_buf` permitem reduzir os buffers
-do socket, mas teste a maior PDU usada (FC3 de 125 registradores = 259
-bytes de frame).
-
-## Validacao no PC (sem SEW)
-
-Um comando faz tudo:
-
-```sh
-tools/run_validation.sh
+```c
+int rc = mbmap_write(&g_map, POINT_AXIS1_POSITION_SETPOINT, 125.0f);
+if (rc != MBTCP_OK) {
+    /* MBTCP_EINVAL, MBTCP_ETIMEOUT, MBTCP_EEXCEPTION, ... */
+}
 ```
 
-Ele sobe dois simuladores, compila o teste host do transporte/mapa,
-testa o codec e roda checagens Python. O teste host usa `tools/host/`
-(mocks de FreeRTOS e sockets POSIX) e exercita o **mbtcp.c real**, nao
-so o Python.
+### 2. Validações do mapa
 
-Manual:
+`mbmap_write` verifica, nesta ordem:
 
-```sh
-# terminal 1 - perfil UHX65A
-python3 tools/sew_sim.py --port 1503 --profile uhx65a --unit 0
+1. mapa/ponto válido e ponto não é somente leitura (`MBA_RO`);
+2. valor finito (`NaN`/infinito rejeitado);
+3. valor dentro de `minimum`/`maximum`;
+4. codificação do valor de engenharia para registradores (`raw = (value - offset) / scale`, com arredondamento e limite do tipo).
 
-# terminal 2
-python3 tools/mbtest.py 127.0.0.1 1503 0 3 1 8
-python3 tools/mbtest.py 127.0.0.1 1503 0 6 1 1
-python3 tools/mbtest.py 127.0.0.1 1503 0 23 1 8 1 1 0 0 0 0 0 0 0
+Para `125.0f`, `S32`, `scale = 1.0`, `offset = 0.0` e `word_order = MBW_HI_LO`, os registradores ficam:
 
-# perfil generico (todas as FCs)
-python3 tools/sew_sim.py --port 1504 --profile generic --unit 1
-python3 tools/mbtest.py 127.0.0.1 1504 1 1 0 16
-python3 tools/mbtest.py 127.0.0.1 1504 1 16 20 1 2 3
-python3 tools/mbtest.py 127.0.0.1 1504 1 22 20 0xFF00 0x0001
-python3 tools/mbtest.py 127.0.0.1 1504 1 24 0x3000
-python3 tools/mbtest.py 127.0.0.1 1504 1 43 2
+- register `3` = `0x0000` (high word)
+- register `4` = `0x007D` (low word)
+
+### 3. Seleção da function code
+
+- valor de 16 bits (`MBV_U16`/`MBV_S16`) -> **FC06** (`Write Single Register`)
+- valor de 32 bits (`MBV_U32`/`MBV_S32`/`MBV_F32`) -> **FC23** (`Read/Write Multiple Registers`)
+
+O mapa usa FC23 para 32 bits porque o UHX65A não garante FC16 para o process data. A transação lê 1 register e escreve 2 registers no mesmo endereço.
+
+> **Premissa a validar no equipamento real:** a implementação assume que o UHX65A aceita FC23 com leitura e escrita no mesmo endereço. Se o equipamento rejeitar essa sobreposição, use a PDU crua/uma sequência de FC06 ou ajuste o mapeamento antes de escrever.
+
+A sequência de controle (habilitar, selecionar modo, escrever setpoint, disparar movimento) e os bits exatos do control word vêm do MOVISUITE/MOVIKIT. Este cliente transporta os valores; ele não inventa o protocolo de movimento.
+
+### 4. Montagem do frame Modbus TCP
+
+Para FC23 em `address = 3`, `read_quantity = 1`, `write_quantity = 2` e dados `00 00 00 7D`:
+
+| Campo | Valor | Bytes |
+|---|---:|---|
+| Transaction ID | `0x0001` (incremental) | `00 01` |
+| Protocol ID | `0x0000` | `00 00` |
+| Length | `0x000F` (Unit + PDU) | `00 0F` |
+| Unit ID | `0x00` | `00` |
+| Function | `0x17` (FC23) | `17` |
+| Read address | `0x0003` | `00 03` |
+| Read quantity | `0x0001` | `00 01` |
+| Write address | `0x0003` | `00 03` |
+| Write quantity | `0x0002` | `00 02` |
+| Write byte count | `0x04` | `04` |
+| Write data | `0x0000007D` | `00 00 00 7D` |
+
+Frame completo (21 bytes):
+
+```
+00 01 00 00 00 0F 00 17 00 03 00 01 00 03 00 02 04 00 00 00 7D
 ```
 
-Para descobrir unit/endereco no bring-up:
+### 5. Envio, resposta e tratamento de erro
 
-```sh
-python3 tools/scan.py 127.0.0.1 1503 --units 0 --addr 1 --range --end 16
+O transporte:
+
+1. garante socket conectado (conecta no primeiro uso ou reconecta se caiu);
+2. envia o frame inteiro dentro do timeout;
+3. lê o cabeçalho MBAP, valida `length` e lê a PDU de resposta;
+4. valida Transaction ID, Protocol ID, Unit ID e function code;
+5. se receber exceção Modbus (`function | 0x80`), retorna `MBTCP_EEXCEPTION` e guarda o código em `mbtcp_last_exception()`;
+6. em timeout/erro de frame, fecha o socket para ressincronizar.
+
+Resposta FC23 típica (lê 1 register):
+
+```
+00 01 00 00 00 05 00 17 02 00 00
 ```
 
-O simulador UHX65A:
+- `17`: FC23
+- `02`: 2 bytes lidos
+- `00 00`: valor lido no endereço `3` (descartado pela escrita de 32 bits do mapa)
 
-- aceita somente FC03, FC06 e FC23;
-- responde excecao 01 para qualquer FC fora de FC03/FC06/FC23
-  (FC16, FC05, FC15, FC43, ...);
-- valida enderecos dentro de `--pd-start .. --pd-start+--pd-count-1`;
-- simula dois eixos: control bit 0 liga o eixo e faz `actual = setpoint`;
-- liga o bit 15 do status apos `--fieldbus-timeout` ms sem escrita;
-- permite injetar latencia (`--latency-ms`), perda (`--drop-rate`) e
-  excecao (`--fault-fc`).
+### 6. Atualização do cache
 
-## Bring-up no UHX65A real
+Se a transação for aceita, `mbmap_write` decodifica os registradores enviados e atualiza `g_cache[POINT_AXIS1_POSITION_SETPOINT]` (`valid`, `timestamp`, `raw_signed`, `raw_unsigned`, `value`). Leituras cíclicas posteriores via `mbmap_tick`/`mbmap_poll_group` atualizam o valor real/estado conforme o mapeamento.
 
-Ordem recomendada, sem escrita ate' o mapeamento estar confirmado:
+### Exemplo equivalente com 16 bits (FC06)
 
-1. **V0** - ping/ARP no controlador, confirme IP e mascara.
-2. **V1** - `mbtcp_connect()` e `tcpprobe_env_dump()`.
-3. **V2** - `mbtcp_read_holding(1, 16, regs)` somente leitura.
-4. **V3** - `mbmap_poll_group()` somente leitura por varios minutos;
-   acompanhe `mbtcp_stats()` (timeouts, frame errors, latencia).
-5. **V4** - primeira escrita: control word inteiro, com valor seguro;
-   so depois setpoint/parametros.
+Para um ponto `U16` no endereço `3` com valor `125`:
 
-Se V2 der excecao 02, o offset/area de PD esta diferente do suposto. Se
-der excecao 01, a FC nao existe nesse firmware/mapeamento.
+```
+request:  00 01 00 00 00 06 00 06 00 03 00 7D
+response: 00 01 00 00 00 06 00 06 00 03 00 7D
+```
 
-## Migracao do codigo atual
+## API do transporte
 
-- Remova `demo_init()` do callback do MQTT. Ele nao cria task, mas faz
-  I/O de rede e pode bloquear o callback.
-- Prefira `mbtcp_init()` + `mbtcp_connect()` + `mbmap_tick()` em uma task
-  de processo.
-- O `mbtcp` antigo continua compilando; `mbtcp_open()`/`mbtcp_read()`/
-  `mbtcp_write()`/`mbtcp_write_multi()` estao preservados.
-- Se o app tinha um loop de leitura com FC03, ele pode ser substituido
-  por um grupo do mapa, reduzindo o numero de transacoes.
+```c
+void mbtcp_cfg_default(mbtcp_cfg_t *cfg);
+int  mbtcp_init(const mbtcp_cfg_t *cfg);
+int  mbtcp_connect(void);
+void mbtcp_disconnect(void);
+int  mbtcp_set_unit(uint8_t unit);
+const mbtcp_stats_t *mbtcp_stats(void);
 
-## Macros uteis
+int mbtcp_read_holding(uint16_t address, uint16_t quantity, uint16_t *registers);
+int mbtcp_write_register(uint16_t address, uint16_t value); /* FC06 */
+int mbtcp_read_write_registers(uint16_t read_address, uint16_t read_quantity,
+                               uint16_t *read_registers,
+                               uint16_t write_address, uint16_t write_quantity,
+                               const uint16_t *write_registers); /* FC23 */
+int mbtcp_raw_pdu(const uint8_t *request_pdu, uint16_t request_pdu_length,
+                  uint8_t *response_pdu, uint16_t response_capacity,
+                  uint16_t *response_pdu_length);
+```
 
-| Macro | Efeito |
-| --- | --- |
-| `-DMBTCP_TRACE=0` | silencia hex de TX/RX |
-| `-DMBMAP_USE_FC16=1` | mapa escreve 32 bits com FC16 em vez de FC23 |
-| `-DMBTCP_MUTEX_TIMEOUT_MS=...` | tempo maximo esperando o socket |
-| `-DTCPPROBE_HAS_ISNETWORKUP=0` | se a versao do stack nao tiver a funcao |
-| `-DTCPPROBE_HAS_MIN_HEAP=0` | se nao usar heap_4/heap_5 |
+Compatibilidade legada preservada:
 
-Exemplo: `C_DEFS += -DMBTCP_TRACE=0 -DMBMAP_USE_FC16=0`.
+- `mbtcp_open`, `mbtcp_close`
+- `mbtcp_read(unit, function_code, address, quantity, registers)` (somente FC03)
+- `mbtcp_write(unit, address, value)` (FC06)
+- `mbtcp_write_multi(unit, address, quantity, registers)` (FC16, legado)
+
+### Configuração
+
+| Campo | Default | Observação |
+|---|---:|---|
+| `ip` | — | obrigatório |
+| `port` | 502 | 502 UHX65A, 1502 simulador |
+| `unit` | 0 | UHX65A usa 0 |
+| `timeout_ms` | 1000 | limitado a 60000 ms |
+| `retries_read` | 0 | leituras podem repetir em timeout/conexão/envio; nunca em exceção/frame inválido |
+| `nodelay` | 1 | TCP_NODELAY |
+| `rx_buf` / `tx_buf` | 0 | 0 = default do stack |
+
+`mbtcp_init()` copia a string de IP, então `cfg.ip` pode apontar para buffer temporário. Escritas não são repetidas automaticamente.
+
+### Erros e diagnóstico
+
+```c
+int rc = mbmap_write(&g_map, POINT_AXIS1_POSITION_SETPOINT, 125.0f);
+if (rc == MBTCP_EEXCEPTION) {
+    int ex = mbtcp_last_exception();
+    /* ex = 1 illegal function, 2 illegal address, 3 illegal value, ... */
+}
+```
+
+`mbtcp_strerror(rc)` e `mbtcp_exception_str(code)` retornam textos curtos para log.
+
+`mbtcp_stats()` expõe contadores (`tx_count`, `rx_count`, `timeouts`, `exceptions`, `frame_errors`, `connect_errors`, `connects`, `retries`, `latency_ms`, `last_error`, `connected`).
+
+## API do mapa
+
+- `MBV_U16`, `MBV_S16`, `MBV_U32`, `MBV_S32`, `MBV_F32`
+- `MBA_RO`, `MBA_RW`, `MBA_WO`
+- `MBW_HI_LO`, `MBW_LO_HI`
+- `MBMAP_MAX_REGISTERS = 125`
+
+Cada ponto possui `address`, `type`, `access`, `word_order`, `group`, `scale`, `offset`, `minimum` e `maximum`. Pontos graváveis devem ter `minimum < maximum`; o mapa rejeita valores fora da faixa e valores não finitos.
+
+`mbgroup_t` define o bloco de leitura cíclica (`address`, `quantity`, `period_ms`). Um grupo lê no máximo 125 registers. `mbmap_tick` retorna o primeiro erro de poll, mas continua processando os demais grupos vencidos.
+
+Valores em cache (`mbval_t`): `valid`, `type`, `timestamp`, `raw_signed`, `raw_unsigned`, `value`. Uma leitura ou poll que falha marca o cache correspondente como inválido (`valid = 0`); valores decodificados não finitos (`NaN`/infinito) também ficam inválidos.
+
+## Bring-up seguro (UHX65A)
+
+1. **Simulador**: valide com `tools/sew_sim.py --profile uhx65a --unit 0 --port 1502` e `bash tools/run_validation.sh`.
+2. **Leitura no equipamento real**: configure `cfg.ip/port/unit` e o mapeamento real; execute somente `mbmap_tick`/leituras e confirme status/valores antes de escrever.
+3. **Primeira escrita**: com drive em estado seguro, escreva o setpoint/control word correto para o layout MOVISUITE, monitore exceções, status e atual.
+4. **Integração**: comande escritas por fila/comando a partir da task de processo; não faça I/O Modbus no callback MQTT.
+
+## Validação no PC
+
+Pré-requisito: Python 3, `gcc` e `make`.
+
+```bash
+bash tools/run_validation.sh
+```
+
+O script executa:
+
+- `tools/sew_sim.py --profile uhx65a --unit 0`
+- `tools/host/test_mbtcp` (transporte + mapa, FC03/06/23, rejeição de FC16)
+- `tools/test_codec.c`
+- `tools/mbtest.py` (oráculo Python independente para FC03/FC06/FC23 e rejeição de FC16)
+- `tools/host/test_faults_asan` (MBAP inválido, transação errada, exceção, timeout, retry, resposta parcial e reconexão, com ASan/UBSan)
+- `tools/host/test_mbtcp_asan` (transporte/mapa contra o simulador, com ASan/UBSan)
+
+Compilação manual dos testes:
+
+```bash
+make -C tools/host
+ASAN_OPTIONS=detect_leaks=0 ./tools/host/test_faults
+ASAN_OPTIONS=detect_leaks=0 ./tools/host/test_faults_asan
+gcc -std=c99 -Wall -Wextra -Werror -Ilib/mbtcp \
+    tools/test_codec.c lib/mbtcp/mbtcp_codec.c -lm -o /tmp/test_codec
+```
+
+## Memória
+
+`mbtcp.c` usa buffers estáticos: `s_tx_frame[260]`, `s_rx_frame[260]` e estado de sessão (~600 bytes). `mbtcp_map.c` usa `s_registers[125]` (250 bytes) para leitura de bloco. O transporte é protegido por mutex interno; o mapa assume uso por uma task (proteja com mutex da aplicação se múltiplas tasks chamarem o mapa).
+
+## Observações
+
+- `MBTCP_TRACE` é `0` por padrão; defina `1` para logar TX/RX em hexadecimal via `tcpprobe`.
+- Leituras usam o campo `length` do MBAP para determinar o tamanho exato da resposta.
+- `mbtcp_raw_pdu` permite usar function codes específicas do equipamento sem aumentar a API pública.
+- Valide sempre no simulador e em modo somente leitura antes da primeira escrita no UHX65A real.

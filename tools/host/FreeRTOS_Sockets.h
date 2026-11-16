@@ -30,6 +30,7 @@ struct freertos_sockaddr {
 Socket_t FreeRTOS_socket(BaseType_t family, BaseType_t type, BaseType_t proto);
 int32_t FreeRTOS_setsockopt(Socket_t sock, int32_t level, int32_t opt,
                             const void *value, size_t len);
+uint32_t FreeRTOS_inet_addr(const char *ip);
 uint16_t FreeRTOS_htons(uint16_t v);
 int32_t FreeRTOS_connect(Socket_t sock,
                          const struct freertos_sockaddr *addr, size_t len);

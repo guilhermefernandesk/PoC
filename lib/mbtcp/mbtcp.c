@@ -1,14 +1,14 @@
 /*
- * mbtcp.c - Modbus TCP cliente sobre FreeRTOS-Plus-TCP
+ * mbtcp.c - cliente Modbus TCP sobre FreeRTOS-Plus-TCP
  *
  * Decisoes:
- *  - buffers TX/RX/PDU estaticos: o mutex ja serializa, entao nao precisam
- *    ficar na stack de cada task chamadora.
- *  - leitura por tamanho exato (MBAP length), nunca "chuta" tamanho.
- *  - em timeout/erro de frame o socket e' fechado para ressincronizar;
- *    a proxima chamada reconecta sozinha.
- *  - excecao Modbus NAO fecha o socket (a resposta e' valida).
- *  - retry de leitura configuravel; escrita nao e' repetida por default.
+ *  - buffers TX/RX estaticos: o mutex serializa, entao nao precisam ficar
+ *    na stack de cada task chamadora;
+ *  - a resposta e' lida pelo campo "length" do MBAP, nunca por chute;
+ *  - timeout/erro de frame fecha o socket para ressincronizar; a proxima
+ *    chamada reconecta sozinha;
+ *  - excecao Modbus nao fecha o socket, porque a resposta e' valida;
+ *  - leitura pode repetir; escrita nunca e' repetida;
  *  - sem task permanente: a aplicacao chama a API de uma task existente.
  */
 #include "mbtcp.h"
@@ -24,179 +24,205 @@
 #include "FreeRTOS_Sockets.h"
 
 /* ------------------------------------------------------------------ */
-/* estado                                                              */
+/* Protocolo                                                           */
 /* ------------------------------------------------------------------ */
 
-static Socket_t s_sock = FREERTOS_INVALID_SOCKET;
-static SemaphoreHandle_t s_mtx = NULL;
+#define MODBUS_TCP_MBAP_PREFIX_SIZE 6u
+#define MODBUS_TCP_HEADER_SIZE 7u
+#define MODBUS_TCP_LENGTH_OFFSET 4u
+#define MODBUS_TCP_UNIT_OFFSET 6u
+#define MODBUS_PROTOCOL_ID 0u
+#define MODBUS_EXCEPTION_FLAG 0x80u
+#define MODBUS_EXCEPTION_PDU_SIZE 2u
+#define MODBUS_MAX_READ_REGISTERS 125u
+#define MODBUS_MAX_WRITE_REGISTERS 123u
+#define MODBUS_MAX_READ_WRITE_WRITE_REGISTERS 121u
 
-static char s_ip[16];
-static uint16_t s_port = 502u;
-static uint8_t s_unit = 0u;          /* UHX65A */
-static uint32_t s_timeout_ms = MBTCP_TIMEOUT_MS;
+/* O campo length do MBAP inclui o unit ID e a PDU. */
+#define MODBUS_MIN_LENGTH_FIELD 2u
+#define MODBUS_MAX_LENGTH_FIELD (MBTCP_MAX_FRAME - MODBUS_TCP_MBAP_PREFIX_SIZE)
+
+#define MODBUS_MAX_WRITE_PDU_SIZE (6u + (2u * MODBUS_MAX_WRITE_REGISTERS))
+#define MODBUS_MAX_READ_WRITE_PDU_SIZE \
+    (10u + (2u * MODBUS_MAX_READ_WRITE_WRITE_REGISTERS))
+
+/* ------------------------------------------------------------------ */
+/* Estado                                                              */
+/* ------------------------------------------------------------------ */
+
+static Socket_t s_socket = FREERTOS_INVALID_SOCKET;
+static SemaphoreHandle_t s_mutex = NULL;
+
+static uint32_t s_ip_address = 0u;
+static char s_ip_text[16];
+static uint16_t s_port = MBTCP_DEFAULT_PORT;
+static uint8_t s_unit = MBTCP_DEFAULT_UNIT;
+static uint32_t s_timeout_ms = MBTCP_DEFAULT_TIMEOUT_MS;
 static uint8_t s_retries_read = 0u;
-static uint8_t s_retries_write = 0u;
-static uint16_t s_rx_buf = 0u;
-static uint16_t s_tx_buf = 0u;
-static uint8_t s_nodelay = 1u;
-static uint16_t s_txid = 0u;
-static int s_last_exc = 0;
+static uint16_t s_rx_buffer_size = 0u;
+static uint16_t s_tx_buffer_size = 0u;
+static uint8_t s_no_delay = 1u;
+static uint16_t s_transaction_id = 0u;
+static int s_last_exception = 0;
 static mbtcp_stats_t s_stats;
 
-/* protegidos pelo mutex */
-static uint8_t s_tx[MBTCP_MAX_FRAME];
-static uint8_t s_rx[MBTCP_MAX_FRAME];
-static uint8_t s_rsp[MBTCP_MAX_PDU];
+/* Protegidos pelo mutex. */
+static uint8_t s_tx_frame[MBTCP_MAX_FRAME];
+static uint8_t s_rx_frame[MBTCP_MAX_FRAME];
 
 /* ------------------------------------------------------------------ */
-/* utilitarios                                                         */
+/* Utilitarios                                                         */
 /* ------------------------------------------------------------------ */
 
-/* "a.b.c.d" -> uint32 em ordem de rede (little-endian: octeto0 no LSB). */
-static int parse_ip4(const char *s, uint32_t *out)
+static uint16_t read_u16(const uint8_t *data)
 {
-    uint32_t v = 0u;
-    uint32_t octet = 0u;
-    int parts = 0;
-    int digits = 0;
-
-    if ((s == NULL) || (out == NULL)) {
-        return 0;
-    }
-
-    for (;;) {
-        char c = *s++;
-
-        if ((c >= '0') && (c <= '9')) {
-            octet = (octet * 10u) + (uint32_t)(c - '0');
-            if ((++digits > 3) || (octet > 255u)) {
-                return 0;
-            }
-        } else if ((c == '.') || (c == '\0')) {
-            if ((digits == 0) || (parts >= 4)) {
-                return 0;
-            }
-            v |= octet << (8 * parts);
-            parts++;
-            octet = 0u;
-            digits = 0;
-
-            if (c == '\0') {
-                break;
-            }
-        } else {
-            return 0;
-        }
-    }
-
-    if (parts != 4) {
-        return 0;
-    }
-
-    *out = v;
-    return 1;
+    return (uint16_t)(((uint16_t)data[0] << 8) | (uint16_t)data[1]);
 }
 
-static int lock_mbtcp(void)
+static void write_u16(uint8_t *data, uint16_t value)
 {
-    if (s_mtx == NULL) {
-        return MBTCP_ECONN;
+    data[0] = (uint8_t)(value >> 8);
+    data[1] = (uint8_t)(value & 0xFFu);
+}
+
+static uint8_t clamp_to_u8(uint8_t value, uint8_t maximum)
+{
+    return (value > maximum) ? maximum : value;
+}
+
+static uint32_t clamp_timeout(uint32_t timeout_ms)
+{
+    if (timeout_ms == 0u) {
+        return MBTCP_DEFAULT_TIMEOUT_MS;
     }
-    if (xSemaphoreTake(s_mtx,
-                       pdMS_TO_TICKS(MBTCP_MUTEX_TIMEOUT_MS)) != pdTRUE) {
-        return MBTCP_EBUSY;
+    if (timeout_ms > MBTCP_MAX_TIMEOUT_MS) {
+        return MBTCP_MAX_TIMEOUT_MS;
+    }
+    return timeout_ms;
+}
+
+static TickType_t timeout_ticks(void)
+{
+    TickType_t ticks = pdMS_TO_TICKS(s_timeout_ms);
+
+    return (ticks == 0u) ? 1u : ticks;
+}
+
+static TickType_t ticks_until(TickType_t deadline)
+{
+    TickType_t now = xTaskGetTickCount();
+
+    if ((int32_t)(deadline - now) <= 0) {
+        return 0u;
+    }
+    return (TickType_t)(deadline - now);
+}
+
+static int set_socket_timeout(uint32_t option, TickType_t ticks)
+{
+    TickType_t value = (ticks == 0u) ? 1u : ticks;
+
+    if (FreeRTOS_setsockopt(s_socket, 0, (int32_t)option,
+                            &value, sizeof(value)) != 0) {
+        return MBTCP_ECONN;
     }
     return MBTCP_OK;
 }
 
-static void unlock_mbtcp(void)
-{
-    (void)xSemaphoreGive(s_mtx);
-}
-
 static int ensure_mutex(void)
 {
-    if (s_mtx == NULL) {
-        s_mtx = xSemaphoreCreateMutex();
-        if (s_mtx == NULL) {
+    if (s_mutex == NULL) {
+        s_mutex = xSemaphoreCreateMutex();
+        if (s_mutex == NULL) {
             return MBTCP_ECONN;
         }
     }
     return MBTCP_OK;
 }
 
+static int lock_client(void)
+{
+    int rc = ensure_mutex();
+
+    if (rc != MBTCP_OK) {
+        return rc;
+    }
+    if (xSemaphoreTake(s_mutex, pdMS_TO_TICKS(MBTCP_MUTEX_TIMEOUT_MS)) != pdTRUE) {
+        return MBTCP_EBUSY;
+    }
+    return MBTCP_OK;
+}
+
+static void unlock_client(void)
+{
+    (void)xSemaphoreGive(s_mutex);
+}
+
 /* ------------------------------------------------------------------ */
-/* socket                                                              */
+/* Socket                                                              */
 /* ------------------------------------------------------------------ */
 
 static void close_socket(void)
 {
-    if (s_sock != FREERTOS_INVALID_SOCKET) {
-        (void)FreeRTOS_shutdown(s_sock, FREERTOS_SHUT_RDWR);
-        (void)FreeRTOS_closesocket(s_sock);
-        s_sock = FREERTOS_INVALID_SOCKET;
+    if (s_socket != FREERTOS_INVALID_SOCKET) {
+        (void)FreeRTOS_shutdown(s_socket, FREERTOS_SHUT_RDWR);
+        (void)FreeRTOS_closesocket(s_socket);
+        s_socket = FREERTOS_INVALID_SOCKET;
     }
     s_stats.connected = 0u;
 }
 
 static int open_socket(void)
 {
-    struct freertos_sockaddr sa;
-    uint32_t addr = 0u;
-    TickType_t tmo;
+    struct freertos_sockaddr address;
+    TickType_t ticks = timeout_ticks();
 
-    if (!parse_ip4(s_ip, &addr)) {
-        tcpprobe_log("mbtcp: ip invalido '%s'", s_ip);
-        return MBTCP_EINVAL;
-    }
-
-    s_sock = FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_STREAM,
-                             FREERTOS_IPPROTO_TCP);
-    if (s_sock == FREERTOS_INVALID_SOCKET) {
+    s_socket = FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_STREAM,
+                               FREERTOS_IPPROTO_TCP);
+    if (s_socket == FREERTOS_INVALID_SOCKET) {
         tcpprobe_log("mbtcp: socket() falhou (heap=%u)",
                      (unsigned)xPortGetFreeHeapSize());
         s_stats.connect_errors++;
         return MBTCP_ECONN;
     }
 
-    tmo = pdMS_TO_TICKS(s_timeout_ms);
-    if (tmo == 0u) {
-        tmo = 1u;
+    if ((set_socket_timeout(FREERTOS_SO_RCVTIMEO, ticks) != MBTCP_OK) ||
+        (set_socket_timeout(FREERTOS_SO_SNDTIMEO, ticks) != MBTCP_OK)) {
+        close_socket();
+        s_stats.connect_errors++;
+        return MBTCP_ECONN;
     }
-    (void)FreeRTOS_setsockopt(s_sock, 0, FREERTOS_SO_RCVTIMEO,
-                              &tmo, sizeof(tmo));
-    (void)FreeRTOS_setsockopt(s_sock, 0, FREERTOS_SO_SNDTIMEO,
-                              &tmo, sizeof(tmo));
 
 #ifdef FREERTOS_SO_RCVBUF
-    if (s_rx_buf != 0u) {
-        uint32_t v = (uint32_t)s_rx_buf;
-        (void)FreeRTOS_setsockopt(s_sock, 0, FREERTOS_SO_RCVBUF,
-                                  &v, sizeof(v));
+    if (s_rx_buffer_size != 0u) {
+        uint32_t value = (uint32_t)s_rx_buffer_size;
+        (void)FreeRTOS_setsockopt(s_socket, 0, FREERTOS_SO_RCVBUF,
+                                  &value, sizeof(value));
     }
 #endif
 #ifdef FREERTOS_SO_SNDBUF
-    if (s_tx_buf != 0u) {
-        uint32_t v = (uint32_t)s_tx_buf;
-        (void)FreeRTOS_setsockopt(s_sock, 0, FREERTOS_SO_SNDBUF,
-                                  &v, sizeof(v));
+    if (s_tx_buffer_size != 0u) {
+        uint32_t value = (uint32_t)s_tx_buffer_size;
+        (void)FreeRTOS_setsockopt(s_socket, 0, FREERTOS_SO_SNDBUF,
+                                  &value, sizeof(value));
     }
 #endif
 #ifdef FREERTOS_SO_TCPNODELAY
-    if (s_nodelay != 0u) {
-        BaseType_t v = pdTRUE;
-        (void)FreeRTOS_setsockopt(s_sock, 0, FREERTOS_SO_TCPNODELAY,
-                                  &v, sizeof(v));
+    if (s_no_delay != 0u) {
+        BaseType_t value = pdTRUE;
+        (void)FreeRTOS_setsockopt(s_socket, 0, FREERTOS_SO_TCPNODELAY,
+                                  &value, sizeof(value));
     }
 #endif
 
-    memset(&sa, 0, sizeof(sa));
-    sa.sin_family = (uint8_t)FREERTOS_AF_INET;
-    sa.sin_port = FreeRTOS_htons(s_port);
-    sa.sin_addr = addr;
+    memset(&address, 0, sizeof(address));
+    address.sin_family = (uint8_t)FREERTOS_AF_INET;
+    address.sin_port = FreeRTOS_htons(s_port);
+    address.sin_addr = s_ip_address;
 
-    if (FreeRTOS_connect(s_sock, &sa, sizeof(sa)) < 0) {
-        tcpprobe_log("mbtcp: connect %s:%u falhou", s_ip, (unsigned)s_port);
+    if (FreeRTOS_connect(s_socket, &address, sizeof(address)) < 0) {
+        tcpprobe_log("mbtcp: connect %s:%u falhou",
+                     s_ip_text, (unsigned)s_port);
         s_stats.connect_errors++;
         close_socket();
         return MBTCP_ECONN;
@@ -205,79 +231,105 @@ static int open_socket(void)
     s_stats.connected = 1u;
     s_stats.connects++;
     tcpprobe_log("mbtcp: conectado %s:%u unit=%u",
-                 s_ip, (unsigned)s_port, (unsigned)s_unit);
+                 s_ip_text, (unsigned)s_port, (unsigned)s_unit);
     return MBTCP_OK;
 }
 
-static int ensure_open(void)
+static int ensure_socket_open(void)
 {
-    if (s_sock != FREERTOS_INVALID_SOCKET) {
+    if (s_socket != FREERTOS_INVALID_SOCKET) {
         return MBTCP_OK;
     }
     return open_socket();
 }
 
-/* Le exatamente need bytes, respeitando um deadline absoluto em ticks. */
-static int recv_full(uint8_t *dst, uint16_t need, TickType_t deadline)
+static int send_all(const uint8_t *data, uint16_t length, TickType_t deadline)
 {
-    uint16_t got = 0u;
+    uint16_t sent = 0u;
 
-    while (got < need) {
-        TickType_t now = xTaskGetTickCount();
-        int32_t n;
+    while (sent < length) {
+        TickType_t remaining = ticks_until(deadline);
+        int32_t written;
+        int rc;
 
-        if ((int32_t)(deadline - now) <= 0) {
+        if (remaining == 0u) {
             return MBTCP_ETIMEOUT;
         }
+        rc = set_socket_timeout(FREERTOS_SO_SNDTIMEO, remaining);
+        if (rc != MBTCP_OK) {
+            return rc;
+        }
 
-        n = FreeRTOS_recv(s_sock, dst + got, (size_t)(need - got), 0);
-        if (n > 0) {
-            got = (uint16_t)(got + (uint16_t)n);
-        } else if (n == 0) {
-            return MBTCP_ECONN;      /* peer fechou */
-        } else {
+        written = FreeRTOS_send(s_socket, data + sent,
+                                (size_t)(length - sent), 0);
+        if (written <= 0) {
+            return MBTCP_ESEND;
+        }
+        sent = (uint16_t)(sent + (uint16_t)written);
+    }
+
+    return MBTCP_OK;
+}
+
+static int receive_all(uint8_t *data, uint16_t length, TickType_t deadline)
+{
+    uint16_t received = 0u;
+
+    while (received < length) {
+        TickType_t remaining = ticks_until(deadline);
+        int32_t read_now;
+        int rc;
+
+        if (remaining == 0u) {
             return MBTCP_ETIMEOUT;
         }
+        rc = set_socket_timeout(FREERTOS_SO_RCVTIMEO, remaining);
+        if (rc != MBTCP_OK) {
+            return rc;
+        }
+
+        read_now = FreeRTOS_recv(s_socket, data + received,
+                                 (size_t)(length - received), 0);
+        if (read_now == 0) {
+            return MBTCP_ECONN;       /* peer fechou */
+        }
+        if (read_now < 0) {
+            return MBTCP_ETIMEOUT;
+        }
+        received = (uint16_t)(received + (uint16_t)read_now);
     }
 
     return MBTCP_OK;
 }
 
 /*
- * Envia tx e recebe um frame Modbus TCP completo em s_rx.
- * Retorna o tamanho total do frame (> 0) ou erro (< 0).
+ * Le um frame completo: primeiro os 6 bytes do MBAP, depois o restante
+ * indicado pelo campo length. O buffer nunca passa de MBTCP_MAX_FRAME.
  */
-static int xfer(const uint8_t *tx, uint16_t txlen, TickType_t deadline)
+static int receive_response_frame(uint16_t *frame_length, TickType_t deadline)
 {
-    uint32_t off = 0u;
-    uint16_t mlen;
+    uint16_t length_field;
     int rc;
 
-    while (off < (uint32_t)txlen) {
-        int32_t n = FreeRTOS_send(s_sock, tx + off,
-                                  (size_t)(txlen - off), 0);
-        if (n <= 0) {
-            return MBTCP_ESEND;
-        }
-        off += (uint32_t)n;
-    }
-
-    rc = recv_full(s_rx, 6u, deadline);
+    rc = receive_all(s_rx_frame, MODBUS_TCP_MBAP_PREFIX_SIZE, deadline);
     if (rc != MBTCP_OK) {
         return rc;
     }
 
-    mlen = (uint16_t)(((uint16_t)s_rx[4] << 8) | (uint16_t)s_rx[5]);
-    if ((mlen < 2u) || ((uint16_t)(6u + mlen) > (uint16_t)sizeof(s_rx))) {
+    length_field = read_u16(s_rx_frame + MODBUS_TCP_LENGTH_OFFSET);
+    if ((length_field < MODBUS_MIN_LENGTH_FIELD) ||
+        (length_field > MODBUS_MAX_LENGTH_FIELD)) {
         return MBTCP_EFRAME;
     }
 
-    rc = recv_full(s_rx + 6, mlen, deadline);
+    rc = receive_all(s_rx_frame + MODBUS_TCP_MBAP_PREFIX_SIZE,
+                     length_field, deadline);
     if (rc != MBTCP_OK) {
         return rc;
     }
 
-    return (int)(6u + mlen);
+    *frame_length = (uint16_t)(MODBUS_TCP_MBAP_PREFIX_SIZE + length_field);
+    return MBTCP_OK;
 }
 
 static int bad_frame(void)
@@ -288,38 +340,57 @@ static int bad_frame(void)
     return MBTCP_EFRAME;
 }
 
+static int is_retryable_error(int error)
+{
+    return (error == MBTCP_ECONN) ||
+           (error == MBTCP_ESEND) ||
+           (error == MBTCP_ETIMEOUT);
+}
+
+/* ------------------------------------------------------------------ */
+/* Transacao                                                           */
+/* ------------------------------------------------------------------ */
+
 /*
- * Executa uma transacao (PDU -> PDU de resposta em s_rsp).
- * Assume o mutex tomado. *rsp_len recebe o tamanho da PDU de resposta
- * (inclui o function code).
+ * Executa uma transacao e devolve um ponteiro para a PDU de resposta
+ * dentro de s_rx_frame. O ponteiro vale ate a proxima transacao.
+ * Assume o mutex tomado.
  */
-static int transact_locked(const uint8_t *pdu, uint16_t pdu_len,
-                           uint16_t *rsp_len, uint8_t retries)
+static int perform_transaction(const uint8_t *request_pdu,
+                               uint16_t request_pdu_length,
+                               const uint8_t **response_pdu,
+                               uint16_t *response_pdu_length,
+                               uint8_t retries)
 {
     uint16_t attempt;
     int rc = MBTCP_ECONN;
-    uint16_t txlen;
 
-    if ((pdu == NULL) || (pdu_len == 0u) || (pdu_len > MBTCP_MAX_PDU) ||
-        (rsp_len == NULL)) {
+    if ((request_pdu == NULL) || (request_pdu_length == 0u) ||
+        (request_pdu_length > MBTCP_MAX_PDU) ||
+        (response_pdu == NULL) || (response_pdu_length == NULL)) {
         return MBTCP_EINVAL;
     }
 
-    txlen = (uint16_t)(7u + pdu_len);
-    s_last_exc = 0;
+    s_last_exception = 0;
 
     for (attempt = 0u; attempt <= retries; attempt++) {
-        uint16_t txid;
-        TickType_t t0;
-        TickType_t t1;
+        uint16_t transaction_id;
+        uint16_t response_frame_length = 0u;
+        uint16_t request_frame_length =
+            (uint16_t)(MODBUS_TCP_HEADER_SIZE + request_pdu_length);
+        uint16_t response_length;
+        uint16_t response_transaction_id;
+        uint16_t response_protocol_id;
+        uint16_t response_length_field;
+        uint8_t response_unit;
+        TickType_t started;
         TickType_t deadline;
-        int flen;
 
         if (attempt != 0u) {
             s_stats.retries++;
         }
 
-        rc = ensure_open();
+        rc = ensure_socket_open();
         if (rc != MBTCP_OK) {
             s_stats.last_error = rc;
             if (attempt < retries) {
@@ -328,39 +399,39 @@ static int transact_locked(const uint8_t *pdu, uint16_t pdu_len,
             break;
         }
 
-        txid = ++s_txid;
-        s_tx[0] = (uint8_t)(txid >> 8);
-        s_tx[1] = (uint8_t)(txid & 0xFFu);
-        s_tx[2] = 0u;
-        s_tx[3] = 0u;
-        s_tx[4] = (uint8_t)((1u + pdu_len) >> 8);
-        s_tx[5] = (uint8_t)((1u + pdu_len) & 0xFFu);
-        s_tx[6] = s_unit;
-        memcpy(s_tx + 7, pdu, pdu_len);
+        transaction_id = ++s_transaction_id;
+        write_u16(s_tx_frame + 0u, transaction_id);
+        write_u16(s_tx_frame + 2u, MODBUS_PROTOCOL_ID);
+        write_u16(s_tx_frame + MODBUS_TCP_LENGTH_OFFSET,
+                  (uint16_t)(1u + request_pdu_length));
+        s_tx_frame[MODBUS_TCP_UNIT_OFFSET] = s_unit;
+        memcpy(s_tx_frame + MODBUS_TCP_HEADER_SIZE,
+               request_pdu, request_pdu_length);
 
 #if MBTCP_TRACE
-        tcpprobe_log_hex("mb tx", s_tx, (unsigned)txlen);
+        tcpprobe_log_hex("mb tx", s_tx_frame, (unsigned)request_frame_length);
 #endif
         s_stats.tx_count++;
 
-        t0 = xTaskGetTickCount();
-        deadline = t0 + pdMS_TO_TICKS(s_timeout_ms);
-        if (deadline == t0) {
-            deadline = t0 + 1u;         /* timeout menor que 1 tick */
+        started = xTaskGetTickCount();
+        deadline = started + timeout_ticks();
+
+        rc = send_all(s_tx_frame, request_frame_length, deadline);
+        if (rc == MBTCP_OK) {
+            rc = receive_response_frame(&response_frame_length, deadline);
         }
-        flen = xfer(s_tx, txlen, deadline);
-        t1 = xTaskGetTickCount();
-        s_stats.latency_ms = (uint32_t)((t1 - t0) *
-                                        (TickType_t)portTICK_PERIOD_MS);
 
 #if MBTCP_TRACE
-        if (flen > 0) {
-            tcpprobe_log_hex("mb rx", s_rx, (unsigned)flen);
+        if (response_frame_length != 0u) {
+            tcpprobe_log_hex("mb rx", s_rx_frame,
+                             (unsigned)response_frame_length);
         }
 #endif
 
-        if (flen < 0) {
-            rc = flen;
+        s_stats.latency_ms = (uint32_t)(xTaskGetTickCount() - started) *
+                             (uint32_t)portTICK_PERIOD_MS;
+
+        if (rc != MBTCP_OK) {
             s_stats.last_error = rc;
             if (rc == MBTCP_ETIMEOUT) {
                 s_stats.timeouts++;
@@ -368,39 +439,40 @@ static int transact_locked(const uint8_t *pdu, uint16_t pdu_len,
                 s_stats.frame_errors++;
             }
             close_socket();
-            if (attempt < retries) {
+            if ((attempt < retries) && is_retryable_error(rc)) {
                 continue;
             }
             break;
         }
 
-        if (flen < 8) {
-            rc = bad_frame();
-            if (attempt < retries) {
-                continue;
-            }
-            break;
-        }
-        if ((s_rx[0] != (uint8_t)(txid >> 8)) ||
-            (s_rx[1] != (uint8_t)(txid & 0xFFu)) ||
-            (s_rx[2] != 0u) || (s_rx[3] != 0u) ||
-            (s_rx[6] != s_unit)) {
-            rc = bad_frame();
-            if (attempt < retries) {
-                continue;
-            }
-            break;
+        if (response_frame_length < (MODBUS_TCP_HEADER_SIZE + 1u)) {
+            return bad_frame();
         }
 
-        if (s_rx[7] == (uint8_t)(pdu[0] | 0x80u)) {
-            if (flen != 9) {
-                rc = bad_frame();
-                if (attempt < retries) {
-                    continue;
-                }
-                break;
+        response_transaction_id = read_u16(s_rx_frame + 0u);
+        response_protocol_id = read_u16(s_rx_frame + 2u);
+        response_length_field = read_u16(s_rx_frame + MODBUS_TCP_LENGTH_OFFSET);
+        response_unit = s_rx_frame[MODBUS_TCP_UNIT_OFFSET];
+
+        if ((response_transaction_id != transaction_id) ||
+            (response_protocol_id != MODBUS_PROTOCOL_ID) ||
+            (response_unit != s_unit) ||
+            (response_length_field !=
+             (uint16_t)(response_frame_length - MODBUS_TCP_MBAP_PREFIX_SIZE))) {
+            return bad_frame();
+        }
+
+        response_length = (uint16_t)(response_frame_length -
+                                      MODBUS_TCP_HEADER_SIZE);
+        *response_pdu = s_rx_frame + MODBUS_TCP_HEADER_SIZE;
+        *response_pdu_length = response_length;
+
+        if ((*response_pdu)[0] ==
+            (uint8_t)(request_pdu[0] | MODBUS_EXCEPTION_FLAG)) {
+            if (response_length != MODBUS_EXCEPTION_PDU_SIZE) {
+                return bad_frame();
             }
-            s_last_exc = (int)s_rx[8];
+            s_last_exception = (int)(*response_pdu)[1];
             s_stats.rx_count++;
             s_stats.exceptions++;
             s_stats.last_error = MBTCP_EEXCEPTION;
@@ -408,25 +480,8 @@ static int transact_locked(const uint8_t *pdu, uint16_t pdu_len,
             break;
         }
 
-        if (s_rx[7] != pdu[0]) {
-            rc = bad_frame();
-            if (attempt < retries) {
-                continue;
-            }
-            break;
-        }
-
-        {
-            uint16_t rlen = (uint16_t)((uint16_t)flen - 7u);
-            if (rlen > (uint16_t)sizeof(s_rsp)) {
-                rc = bad_frame();
-                if (attempt < retries) {
-                    continue;
-                }
-                break;
-            }
-            memcpy(s_rsp, s_rx + 7, rlen);
-            *rsp_len = rlen;
+        if ((*response_pdu)[0] != request_pdu[0]) {
+            return bad_frame();
         }
 
         s_stats.rx_count++;
@@ -439,441 +494,141 @@ static int transact_locked(const uint8_t *pdu, uint16_t pdu_len,
 }
 
 /* ------------------------------------------------------------------ */
-/* blocos internos (assumem mutex tomado)                              */
+/* Operacoes internas (assumem o mutex tomado)                         */
 /* ------------------------------------------------------------------ */
 
-static int read_regs_locked(uint8_t fc, uint16_t addr, uint16_t qty,
-                            uint16_t *out, uint8_t retries)
+static int read_holding_registers(uint16_t address, uint16_t quantity,
+                                  uint16_t *registers, uint8_t retries)
 {
-    uint8_t pdu[5];
-    uint16_t rlen;
-    uint16_t i;
+    uint8_t request[5];
+    const uint8_t *response;
+    uint16_t response_length;
+    uint16_t byte_count = (uint16_t)(2u * quantity);
+    uint16_t index;
     int rc;
 
-    pdu[0] = fc;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-    pdu[3] = (uint8_t)(qty >> 8);
-    pdu[4] = (uint8_t)(qty & 0xFFu);
+    request[0] = MBTCP_FUNCTION_READ_HOLDING_REGISTERS;
+    write_u16(request + 1u, address);
+    write_u16(request + 3u, quantity);
 
-    rc = transact_locked(pdu, 5u, &rlen, retries);
+    rc = perform_transaction(request, sizeof(request), &response,
+                             &response_length, retries);
     if (rc != MBTCP_OK) {
         return rc;
     }
 
-    if ((rlen != (uint16_t)(2u + (2u * qty))) ||
-        (s_rsp[1] != (uint8_t)(2u * qty))) {
+    if ((response_length != (uint16_t)(2u + byte_count)) ||
+        (response[1] != (uint8_t)byte_count)) {
         return bad_frame();
     }
 
-    for (i = 0u; i < qty; i++) {
-        out[i] = (uint16_t)(((uint16_t)s_rsp[2u + (2u * i)] << 8) |
-                            (uint16_t)s_rsp[3u + (2u * i)]);
+    for (index = 0u; index < quantity; index++) {
+        registers[index] = read_u16(response + 2u + (2u * index));
     }
     return MBTCP_OK;
 }
 
-static int read_bits_locked(uint8_t fc, uint16_t addr, uint16_t qty,
-                            uint8_t *bits, uint8_t retries)
-{
-    uint8_t pdu[5];
-    uint16_t rlen;
-    uint16_t bc;
-    uint16_t i;
-    int rc;
-
-    bc = (uint16_t)((qty + 7u) / 8u);
-
-    pdu[0] = fc;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-    pdu[3] = (uint8_t)(qty >> 8);
-    pdu[4] = (uint8_t)(qty & 0xFFu);
-
-    rc = transact_locked(pdu, 5u, &rlen, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-
-    if ((rlen != (uint16_t)(2u + bc)) || (s_rsp[1] != (uint8_t)bc)) {
-        return bad_frame();
-    }
-
-    for (i = 0u; i < qty; i++) {
-        bits[i] = (uint8_t)((s_rsp[2u + (i / 8u)] >> (i % 8u)) & 1u);
-    }
-    return MBTCP_OK;
-}
-
-static int write_coil_locked(uint16_t addr, int on, uint8_t retries)
-{
-    uint8_t pdu[5];
-    uint16_t value = (on != 0) ? 0xFF00u : 0x0000u;
-    uint16_t rlen;
-    int rc;
-
-    pdu[0] = 5u;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-    pdu[3] = (uint8_t)(value >> 8);
-    pdu[4] = (uint8_t)(value & 0xFFu);
-
-    rc = transact_locked(pdu, 5u, &rlen, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    if ((rlen != 5u) || (s_rsp[1] != pdu[1]) || (s_rsp[2] != pdu[2]) ||
-        (s_rsp[3] != pdu[3]) || (s_rsp[4] != pdu[4])) {
-        return bad_frame();
-    }
-    return MBTCP_OK;
-}
-
-static int write_register_locked(uint16_t addr, uint16_t value,
+static int write_single_register(uint16_t address, uint16_t value,
                                  uint8_t retries)
 {
-    uint8_t pdu[5];
-    uint16_t rlen;
+    uint8_t request[5];
+    const uint8_t *response;
+    uint16_t response_length;
     int rc;
 
-    pdu[0] = 6u;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-    pdu[3] = (uint8_t)(value >> 8);
-    pdu[4] = (uint8_t)(value & 0xFFu);
+    request[0] = MBTCP_FUNCTION_WRITE_SINGLE_REGISTER;
+    write_u16(request + 1u, address);
+    write_u16(request + 3u, value);
 
-    rc = transact_locked(pdu, 5u, &rlen, retries);
+    rc = perform_transaction(request, sizeof(request), &response,
+                             &response_length, retries);
     if (rc != MBTCP_OK) {
         return rc;
     }
-    if ((rlen != 5u) || (s_rsp[1] != pdu[1]) || (s_rsp[2] != pdu[2]) ||
-        (s_rsp[3] != pdu[3]) || (s_rsp[4] != pdu[4])) {
+
+    if ((response_length != (uint16_t)sizeof(request)) ||
+        (memcmp(response, request, sizeof(request)) != 0)) {
         return bad_frame();
     }
     return MBTCP_OK;
 }
 
-static int write_coils_locked(uint16_t addr, uint16_t qty,
-                              const uint8_t *bits, uint8_t retries)
+static int write_multiple_registers(uint16_t address, uint16_t quantity,
+                                    const uint16_t *registers, uint8_t retries)
 {
-    uint8_t pdu[6u + 250u];
-    uint16_t bc;
-    uint16_t rlen;
-    uint16_t i;
-    uint16_t len;
+    uint8_t request[MODBUS_MAX_WRITE_PDU_SIZE];
+    const uint8_t *response;
+    uint16_t response_length;
+    uint16_t request_length =
+        (uint16_t)(6u + (2u * quantity));
+    uint16_t index;
     int rc;
 
-    bc = (uint16_t)((qty + 7u) / 8u);
-    len = (uint16_t)(6u + bc);
+    request[0] = MBTCP_FUNCTION_WRITE_MULTIPLE_REGISTERS;
+    write_u16(request + 1u, address);
+    write_u16(request + 3u, quantity);
+    request[5] = (uint8_t)(2u * quantity);
 
-    pdu[0] = 15u;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-    pdu[3] = (uint8_t)(qty >> 8);
-    pdu[4] = (uint8_t)(qty & 0xFFu);
-    pdu[5] = (uint8_t)bc;
-    memset(pdu + 6, 0, bc);
-
-    for (i = 0u; i < qty; i++) {
-        if (bits[i] != 0u) {
-            pdu[6u + (i / 8u)] |= (uint8_t)(1u << (i % 8u));
-        }
+    for (index = 0u; index < quantity; index++) {
+        write_u16(request + 6u + (2u * index), registers[index]);
     }
 
-    rc = transact_locked(pdu, len, &rlen, retries);
+    rc = perform_transaction(request, request_length, &response,
+                             &response_length, retries);
     if (rc != MBTCP_OK) {
         return rc;
     }
-    if ((rlen != 5u) || (s_rsp[1] != pdu[1]) || (s_rsp[2] != pdu[2]) ||
-        (s_rsp[3] != pdu[3]) || (s_rsp[4] != pdu[4])) {
+
+    if ((response_length != 5u) ||
+        (memcmp(response, request, 5u) != 0)) {
         return bad_frame();
     }
     return MBTCP_OK;
 }
 
-static int write_registers_locked(uint16_t addr, uint16_t qty,
-                                  const uint16_t *values, uint8_t retries)
+static int read_write_registers(uint16_t read_address, uint16_t read_quantity,
+                                uint16_t *read_registers,
+                                uint16_t write_address, uint16_t write_quantity,
+                                const uint16_t *write_registers)
 {
-    uint8_t pdu[6u + 246u];
-    uint16_t len;
-    uint16_t rlen;
-    uint16_t i;
+    uint8_t request[MODBUS_MAX_READ_WRITE_PDU_SIZE];
+    const uint8_t *response;
+    uint16_t response_length;
+    uint16_t request_length =
+        (uint16_t)(10u + (2u * write_quantity));
+    uint16_t byte_count = (uint16_t)(2u * read_quantity);
+    uint16_t index;
     int rc;
 
-    len = (uint16_t)(6u + (2u * qty));
+    request[0] = MBTCP_FUNCTION_READ_WRITE_MULTIPLE_REGISTERS;
+    write_u16(request + 1u, read_address);
+    write_u16(request + 3u, read_quantity);
+    write_u16(request + 5u, write_address);
+    write_u16(request + 7u, write_quantity);
+    request[9] = (uint8_t)(2u * write_quantity);
 
-    pdu[0] = 16u;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-    pdu[3] = (uint8_t)(qty >> 8);
-    pdu[4] = (uint8_t)(qty & 0xFFu);
-    pdu[5] = (uint8_t)(2u * qty);
-
-    for (i = 0u; i < qty; i++) {
-        pdu[6u + (2u * i)] = (uint8_t)(values[i] >> 8);
-        pdu[7u + (2u * i)] = (uint8_t)(values[i] & 0xFFu);
+    for (index = 0u; index < write_quantity; index++) {
+        write_u16(request + 10u + (2u * index), write_registers[index]);
     }
 
-    rc = transact_locked(pdu, len, &rlen, retries);
+    /*
+     * FC23 contem uma escrita. Mesmo que a leitura falhe, repetir a
+     * transacao pode repetir a escrita, entao retries fica sempre em 0.
+     */
+    rc = perform_transaction(request, request_length, &response,
+                             &response_length, 0u);
     if (rc != MBTCP_OK) {
         return rc;
     }
-    if ((rlen != 5u) || (s_rsp[1] != pdu[1]) || (s_rsp[2] != pdu[2]) ||
-        (s_rsp[3] != pdu[3]) || (s_rsp[4] != pdu[4])) {
-        return bad_frame();
-    }
-    return MBTCP_OK;
-}
 
-static int mask_write_locked(uint16_t addr, uint16_t and_mask,
-                             uint16_t or_mask, uint8_t retries)
-{
-    uint8_t pdu[7];
-    uint16_t rlen;
-    int rc;
-
-    pdu[0] = 22u;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-    pdu[3] = (uint8_t)(and_mask >> 8);
-    pdu[4] = (uint8_t)(and_mask & 0xFFu);
-    pdu[5] = (uint8_t)(or_mask >> 8);
-    pdu[6] = (uint8_t)(or_mask & 0xFFu);
-
-    rc = transact_locked(pdu, 7u, &rlen, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    if ((rlen != 7u) || (memcmp(s_rsp + 1, pdu + 1, 6u) != 0)) {
-        return bad_frame();
-    }
-    return MBTCP_OK;
-}
-
-static int read_write_locked(uint16_t raddr, uint16_t rqty, uint16_t *rout,
-                             uint16_t waddr, uint16_t wqty,
-                             const uint16_t *win, uint8_t retries)
-{
-    uint8_t pdu[10u + 242u];
-    uint16_t len;
-    uint16_t rlen;
-    uint16_t i;
-    int rc;
-
-    len = (uint16_t)(10u + (2u * wqty));
-
-    pdu[0] = 23u;
-    pdu[1] = (uint8_t)(raddr >> 8);
-    pdu[2] = (uint8_t)(raddr & 0xFFu);
-    pdu[3] = (uint8_t)(rqty >> 8);
-    pdu[4] = (uint8_t)(rqty & 0xFFu);
-    pdu[5] = (uint8_t)(waddr >> 8);
-    pdu[6] = (uint8_t)(waddr & 0xFFu);
-    pdu[7] = (uint8_t)(wqty >> 8);
-    pdu[8] = (uint8_t)(wqty & 0xFFu);
-    pdu[9] = (uint8_t)(2u * wqty);
-
-    for (i = 0u; i < wqty; i++) {
-        pdu[10u + (2u * i)] = (uint8_t)(win[i] >> 8);
-        pdu[11u + (2u * i)] = (uint8_t)(win[i] & 0xFFu);
-    }
-
-    rc = transact_locked(pdu, len, &rlen, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    if ((rlen != (uint16_t)(2u + (2u * rqty))) ||
-        (s_rsp[1] != (uint8_t)(2u * rqty))) {
+    if ((response_length != (uint16_t)(2u + byte_count)) ||
+        (response[1] != (uint8_t)byte_count)) {
         return bad_frame();
     }
 
-    for (i = 0u; i < rqty; i++) {
-        rout[i] = (uint16_t)(((uint16_t)s_rsp[2u + (2u * i)] << 8) |
-                             (uint16_t)s_rsp[3u + (2u * i)]);
+    for (index = 0u; index < read_quantity; index++) {
+        read_registers[index] = read_u16(response + 2u + (2u * index));
     }
-    return MBTCP_OK;
-}
-
-static int read_fifo_locked(uint16_t addr, uint16_t *out, uint16_t cap,
-                            uint16_t *count, uint8_t retries)
-{
-    uint8_t pdu[3];
-    uint16_t rlen;
-    uint16_t bc;
-    uint16_t n;
-    uint16_t i;
-    int rc;
-
-    pdu[0] = 24u;
-    pdu[1] = (uint8_t)(addr >> 8);
-    pdu[2] = (uint8_t)(addr & 0xFFu);
-
-    rc = transact_locked(pdu, 3u, &rlen, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    if (rlen < 4u) {
-        return bad_frame();
-    }
-
-    bc = s_rsp[1];
-    n = (uint16_t)(((uint16_t)s_rsp[2] << 8) | (uint16_t)s_rsp[3]);
-
-    if ((bc != (uint16_t)(2u + (2u * n))) ||
-        (rlen != (uint16_t)(2u + bc)) || (n > 31u)) {
-        return bad_frame();
-    }
-    if (n > cap) {
-        return MBTCP_EINVAL;
-    }
-
-    for (i = 0u; i < n; i++) {
-        out[i] = (uint16_t)(((uint16_t)s_rsp[4u + (2u * i)] << 8) |
-                            (uint16_t)s_rsp[5u + (2u * i)]);
-    }
-    *count = n;
-    return MBTCP_OK;
-}
-
-static int read_file_locked(uint16_t file, uint16_t record, uint16_t qty,
-                            uint16_t *out, uint8_t retries)
-{
-    uint8_t pdu[9];
-    uint16_t rlen;
-    uint16_t bc;
-    uint16_t sub_len;
-    uint16_t i;
-    int rc;
-
-    pdu[0] = 20u;
-    pdu[1] = 7u;                 /* byte count */
-    pdu[2] = 6u;                 /* reference type */
-    pdu[3] = (uint8_t)(file >> 8);
-    pdu[4] = (uint8_t)(file & 0xFFu);
-    pdu[5] = (uint8_t)(record >> 8);
-    pdu[6] = (uint8_t)(record & 0xFFu);
-    pdu[7] = (uint8_t)(qty >> 8);
-    pdu[8] = (uint8_t)(qty & 0xFFu);
-
-    rc = transact_locked(pdu, 9u, &rlen, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    if (rlen < 4u) {
-        return bad_frame();
-    }
-
-    bc = s_rsp[1];
-    sub_len = s_rsp[2];
-
-    if ((bc != (uint16_t)(2u + (2u * qty))) ||
-        (sub_len != (uint16_t)(1u + (2u * qty))) ||
-        (s_rsp[3] != 6u) ||
-        (rlen != (uint16_t)(2u + bc))) {
-        return bad_frame();
-    }
-
-    for (i = 0u; i < qty; i++) {
-        out[i] = (uint16_t)(((uint16_t)s_rsp[4u + (2u * i)] << 8) |
-                            (uint16_t)s_rsp[5u + (2u * i)]);
-    }
-    return MBTCP_OK;
-}
-
-static int write_file_locked(uint16_t file, uint16_t record, uint16_t qty,
-                             const uint16_t *in, uint8_t retries)
-{
-    uint8_t pdu[9u + 244u];
-    uint16_t len;
-    uint16_t rlen;
-    uint16_t i;
-    int rc;
-
-    len = (uint16_t)(9u + (2u * qty));
-
-    pdu[0] = 21u;
-    pdu[1] = (uint8_t)(7u + (2u * qty));
-    pdu[2] = 6u;
-    pdu[3] = (uint8_t)(file >> 8);
-    pdu[4] = (uint8_t)(file & 0xFFu);
-    pdu[5] = (uint8_t)(record >> 8);
-    pdu[6] = (uint8_t)(record & 0xFFu);
-    pdu[7] = (uint8_t)(qty >> 8);
-    pdu[8] = (uint8_t)(qty & 0xFFu);
-
-    for (i = 0u; i < qty; i++) {
-        pdu[9u + (2u * i)] = (uint8_t)(in[i] >> 8);
-        pdu[10u + (2u * i)] = (uint8_t)(in[i] & 0xFFu);
-    }
-
-    rc = transact_locked(pdu, len, &rlen, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    if ((rlen != len) || (memcmp(s_rsp, pdu, len) != 0)) {
-        return bad_frame();
-    }
-    return MBTCP_OK;
-}
-
-static int device_id_locked(uint8_t category, uint8_t start_obj,
-                            mbtcp_devinfo_cb cb, void *ctx)
-{
-    uint8_t obj_id = start_obj;
-    uint8_t page;
-
-    for (page = 0u; page < 32u; page++) {
-        uint8_t pdu[4];
-        uint16_t rlen;
-        uint8_t n;
-        uint8_t i;
-        uint16_t off;
-        int rc;
-
-        pdu[0] = 0x2Bu;
-        pdu[1] = 0x0Eu;
-        pdu[2] = category;
-        pdu[3] = obj_id;
-
-        rc = transact_locked(pdu, 4u, &rlen, s_retries_read);
-        if (rc != MBTCP_OK) {
-            return rc;
-        }
-
-        if ((rlen < 7u) || (s_rsp[0] != 0x2Bu) ||
-            (s_rsp[1] != 0x0Eu) || (s_rsp[2] != category)) {
-            return bad_frame();
-        }
-
-        n = s_rsp[6];
-        off = 7u;
-
-        for (i = 0u; i < n; i++) {
-            uint8_t id;
-            uint8_t len;
-
-            if ((uint16_t)(off + 2u) > rlen) {
-                return bad_frame();
-            }
-            id = s_rsp[off];
-            len = s_rsp[off + 1u];
-            off = (uint16_t)(off + 2u);
-
-            if ((uint16_t)(off + len) > rlen) {
-                return bad_frame();
-            }
-            if (cb != NULL) {
-                cb(id, s_rsp + off, len, ctx);
-            }
-            off = (uint16_t)(off + len);
-        }
-
-        if ((s_rsp[4] == 0u) || (s_rsp[5] == obj_id)) {
-            break;
-        }
-        obj_id = s_rsp[5];
-    }
-
     return MBTCP_OK;
 }
 
@@ -886,21 +641,26 @@ void mbtcp_cfg_default(mbtcp_cfg_t *cfg)
     if (cfg == NULL) {
         return;
     }
+
     memset(cfg, 0, sizeof(*cfg));
-    cfg->port = 502u;
-    cfg->unit = 0u;
-    cfg->timeout_ms = MBTCP_TIMEOUT_MS;
+    cfg->port = MBTCP_DEFAULT_PORT;
+    cfg->unit = MBTCP_DEFAULT_UNIT;
+    cfg->timeout_ms = MBTCP_DEFAULT_TIMEOUT_MS;
     cfg->retries_read = 0u;
-    cfg->retries_write = 0u;
     cfg->nodelay = 1u;
 }
 
 int mbtcp_init(const mbtcp_cfg_t *cfg)
 {
-    uint32_t tmp = 0u;
+    uint32_t ip_address;
     int rc;
 
-    if ((cfg == NULL) || (cfg->ip == NULL) || !parse_ip4(cfg->ip, &tmp)) {
+    if ((cfg == NULL) || (cfg->ip == NULL)) {
+        return MBTCP_EINVAL;
+    }
+
+    ip_address = FreeRTOS_inet_addr(cfg->ip);
+    if (ip_address == 0u) {
         return MBTCP_EINVAL;
     }
 
@@ -909,76 +669,64 @@ int mbtcp_init(const mbtcp_cfg_t *cfg)
         return rc;
     }
 
-    rc = lock_mbtcp();
+    rc = lock_client();
     if (rc != MBTCP_OK) {
         return rc;
     }
 
     close_socket();
 
-    memset(s_ip, 0, sizeof(s_ip));
-    strncpy(s_ip, cfg->ip, sizeof(s_ip) - 1u);
-    s_port = (cfg->port != 0u) ? cfg->port : 502u;
+    memset(s_ip_text, 0, sizeof(s_ip_text));
+    strncpy(s_ip_text, cfg->ip, sizeof(s_ip_text) - 1u);
+    s_ip_address = ip_address;
+    s_port = (cfg->port != 0u) ? cfg->port : MBTCP_DEFAULT_PORT;
     s_unit = cfg->unit;
-    s_timeout_ms = (cfg->timeout_ms != 0u) ? cfg->timeout_ms
-                                           : MBTCP_TIMEOUT_MS;
-    s_retries_read = (cfg->retries_read > 5u) ? 5u : cfg->retries_read;
-    s_retries_write = (cfg->retries_write > 5u) ? 5u : cfg->retries_write;
-    s_rx_buf = cfg->rx_buf;
-    s_tx_buf = cfg->tx_buf;
-    s_nodelay = cfg->nodelay;
-    s_txid = 0u;
-    s_last_exc = 0;
+    s_timeout_ms = clamp_timeout(cfg->timeout_ms);
+    s_retries_read = clamp_to_u8(cfg->retries_read, MBTCP_MAX_RETRIES);
+    s_rx_buffer_size = cfg->rx_buf;
+    s_tx_buffer_size = cfg->tx_buf;
+    s_no_delay = cfg->nodelay;
+    s_transaction_id = 0u;
+    s_last_exception = 0;
     memset(&s_stats, 0, sizeof(s_stats));
 
-    unlock_mbtcp();
+    unlock_client();
     return MBTCP_OK;
 }
 
 int mbtcp_connect(void)
 {
-    int rc;
+    int rc = lock_client();
 
-    rc = ensure_mutex();
     if (rc != MBTCP_OK) {
         return rc;
     }
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-
-    rc = ensure_open();
-    unlock_mbtcp();
+    rc = ensure_socket_open();
+    unlock_client();
     return rc;
 }
 
 void mbtcp_disconnect(void)
 {
-    if (s_mtx == NULL) {
+    if (s_mutex == NULL) {
         close_socket();
         return;
     }
-    if (lock_mbtcp() == MBTCP_OK) {
+    if (lock_client() == MBTCP_OK) {
         close_socket();
-        unlock_mbtcp();
+        unlock_client();
     }
 }
 
 int mbtcp_set_unit(uint8_t unit)
 {
-    int rc;
+    int rc = lock_client();
 
-    rc = ensure_mutex();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = lock_mbtcp();
     if (rc != MBTCP_OK) {
         return rc;
     }
     s_unit = unit;
-    unlock_mbtcp();
+    unlock_client();
     return MBTCP_OK;
 }
 
@@ -996,7 +744,6 @@ int mbtcp_open(const char *ip, uint16_t port, uint32_t timeout_ms)
     cfg.ip = ip;
     cfg.port = port;
     cfg.timeout_ms = timeout_ms;
-    cfg.unit = 0u;
 
     rc = mbtcp_init(&cfg);
     if (rc != MBTCP_OK) {
@@ -1010,349 +757,169 @@ void mbtcp_close(void)
     mbtcp_disconnect();
 }
 
-int mbtcp_read_holding(uint16_t addr, uint16_t qty, uint16_t *out)
+int mbtcp_read_holding(uint16_t address, uint16_t quantity,
+                       uint16_t *registers)
 {
     int rc;
 
-    if ((out == NULL) || (qty == 0u) || (qty > 125u)) {
+    if ((registers == NULL) || (quantity == 0u) ||
+        (quantity > MODBUS_MAX_READ_REGISTERS)) {
         return MBTCP_EINVAL;
     }
 
-    rc = lock_mbtcp();
+    rc = lock_client();
     if (rc != MBTCP_OK) {
         return rc;
     }
-    rc = read_regs_locked(3u, addr, qty, out, s_retries_read);
-    unlock_mbtcp();
+    rc = read_holding_registers(address, quantity, registers, s_retries_read);
+    unlock_client();
     return rc;
 }
 
-int mbtcp_read_input(uint16_t addr, uint16_t qty, uint16_t *out)
+int mbtcp_write_register(uint16_t address, uint16_t value)
+{
+    int rc = lock_client();
+
+    if (rc != MBTCP_OK) {
+        return rc;
+    }
+    rc = write_single_register(address, value, 0u);
+    unlock_client();
+    return rc;
+}
+
+int mbtcp_read_write_registers(uint16_t read_address, uint16_t read_quantity,
+                               uint16_t *read_registers,
+                               uint16_t write_address, uint16_t write_quantity,
+                               const uint16_t *write_registers)
 {
     int rc;
 
-    if ((out == NULL) || (qty == 0u) || (qty > 125u)) {
+    if ((read_registers == NULL) || (read_quantity == 0u) ||
+        (read_quantity > MODBUS_MAX_READ_REGISTERS) ||
+        (write_registers == NULL) || (write_quantity == 0u) ||
+        (write_quantity > MODBUS_MAX_READ_WRITE_WRITE_REGISTERS)) {
         return MBTCP_EINVAL;
     }
 
-    rc = lock_mbtcp();
+    rc = lock_client();
     if (rc != MBTCP_OK) {
         return rc;
     }
-    rc = read_regs_locked(4u, addr, qty, out, s_retries_read);
-    unlock_mbtcp();
+    rc = read_write_registers(read_address, read_quantity, read_registers,
+                              write_address, write_quantity, write_registers);
+    unlock_client();
     return rc;
 }
 
-int mbtcp_read_coils(uint16_t addr, uint16_t qty, uint8_t *bits)
+int mbtcp_raw_pdu(const uint8_t *request_pdu, uint16_t request_pdu_length,
+                  uint8_t *response_pdu, uint16_t response_capacity,
+                  uint16_t *response_pdu_length)
 {
+    const uint8_t *response;
+    uint16_t response_length = 0u;
     int rc;
 
-    if ((bits == NULL) || (qty == 0u) || (qty > 2000u)) {
+    if ((request_pdu == NULL) || (request_pdu_length == 0u) ||
+        (request_pdu_length > MBTCP_MAX_PDU) ||
+        (response_pdu == NULL) || (response_capacity == 0u) ||
+        (response_pdu_length == NULL)) {
         return MBTCP_EINVAL;
     }
+    *response_pdu_length = 0u;
 
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = read_bits_locked(1u, addr, qty, bits, s_retries_read);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_read_discrete_inputs(uint16_t addr, uint16_t qty, uint8_t *bits)
-{
-    int rc;
-
-    if ((bits == NULL) || (qty == 0u) || (qty > 2000u)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = read_bits_locked(2u, addr, qty, bits, s_retries_read);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_write_coil(uint16_t addr, int on)
-{
-    int rc;
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = write_coil_locked(addr, on, s_retries_write);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_write_register(uint16_t addr, uint16_t value)
-{
-    int rc;
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = write_register_locked(addr, value, s_retries_write);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_write_coils(uint16_t addr, uint16_t qty, const uint8_t *bits)
-{
-    int rc;
-
-    if ((bits == NULL) || (qty == 0u) || (qty > 1968u)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = write_coils_locked(addr, qty, bits, s_retries_write);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_write_registers(uint16_t addr, uint16_t qty,
-                          const uint16_t *values)
-{
-    int rc;
-
-    if ((values == NULL) || (qty == 0u) || (qty > 123u)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = write_registers_locked(addr, qty, values, s_retries_write);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_mask_write_register(uint16_t addr,
-                              uint16_t and_mask, uint16_t or_mask)
-{
-    int rc;
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = mask_write_locked(addr, and_mask, or_mask, s_retries_write);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_read_write_registers(uint16_t raddr, uint16_t rqty, uint16_t *rout,
-                               uint16_t waddr, uint16_t wqty,
-                               const uint16_t *win)
-{
-    int rc;
-
-    if ((rout == NULL) || (rqty == 0u) || (rqty > 125u) ||
-        (win == NULL) || (wqty == 0u) || (wqty > 121u)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = read_write_locked(raddr, rqty, rout, waddr, wqty, win,
-                           s_retries_write);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_read_fifo(uint16_t addr, uint16_t *out, uint16_t cap,
-                    uint16_t *count)
-{
-    int rc;
-
-    if ((out == NULL) || (cap == 0u) || (count == NULL)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = read_fifo_locked(addr, out, cap, count, s_retries_read);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_read_file_record(uint16_t file, uint16_t record,
-                           uint16_t qty, uint16_t *out)
-{
-    int rc;
-
-    if ((out == NULL) || (qty == 0u) || (qty > 124u)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = read_file_locked(file, record, qty, out, s_retries_read);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_write_file_record(uint16_t file, uint16_t record,
-                            uint16_t qty, const uint16_t *in)
-{
-    int rc;
-
-    if ((in == NULL) || (qty == 0u) || (qty > 122u)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = write_file_locked(file, record, qty, in, s_retries_write);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_read_device_id(uint8_t category,
-                         mbtcp_devinfo_cb cb, void *ctx)
-{
-    return mbtcp_read_device_id_obj(category, 0u, cb, ctx);
-}
-
-int mbtcp_read_device_id_obj(uint8_t category, uint8_t obj_id,
-                             mbtcp_devinfo_cb cb, void *ctx)
-{
-    int rc;
-
-    if ((category < 1u) || (category > 4u)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_mbtcp();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    rc = device_id_locked(category, obj_id, cb, ctx);
-    unlock_mbtcp();
-    return rc;
-}
-
-int mbtcp_raw_pdu(const uint8_t *pdu, uint16_t pdu_len,
-                  uint8_t *rsp, uint16_t rsp_cap, uint16_t *rsp_len)
-{
-    uint16_t rlen = 0u;
-    int rc;
-
-    if ((pdu == NULL) || (pdu_len == 0u) || (pdu_len > MBTCP_MAX_PDU) ||
-        (rsp == NULL) || (rsp_cap < 2u) || (rsp_len == NULL)) {
-        return MBTCP_EINVAL;
-    }
-    *rsp_len = 0u;
-
-    rc = lock_mbtcp();
+    rc = lock_client();
     if (rc != MBTCP_OK) {
         return rc;
     }
 
-    rc = transact_locked(pdu, pdu_len, &rlen, 0u);
+    rc = perform_transaction(request_pdu, request_pdu_length, &response,
+                             &response_length, 0u);
     if (rc == MBTCP_OK) {
-        if (rlen > rsp_cap) {
+        if (response_length > response_capacity) {
+            s_stats.last_error = MBTCP_EINVAL;
             rc = MBTCP_EINVAL;
         } else {
-            memcpy(rsp, s_rsp, rlen);
-            *rsp_len = rlen;
+            memcpy(response_pdu, response, response_length);
+            *response_pdu_length = response_length;
         }
     }
 
-    unlock_mbtcp();
+    unlock_client();
     return rc;
 }
 
-int mbtcp_read(uint8_t unit, uint8_t fc, uint16_t addr,
-               uint16_t qty, uint16_t *out)
+int mbtcp_read(uint8_t unit, uint8_t function_code, uint16_t address,
+               uint16_t quantity, uint16_t *registers)
 {
+    uint8_t saved_unit;
     int rc;
-    uint8_t saved;
 
-    if ((out == NULL) || (qty == 0u) || (qty > 125u) ||
-        ((fc != 3u) && (fc != 4u))) {
+    if ((registers == NULL) || (quantity == 0u) ||
+        (quantity > MODBUS_MAX_READ_REGISTERS) ||
+        (function_code != MBTCP_FUNCTION_READ_HOLDING_REGISTERS)) {
         return MBTCP_EINVAL;
     }
 
-    rc = lock_mbtcp();
+    rc = lock_client();
     if (rc != MBTCP_OK) {
         return rc;
     }
-    saved = s_unit;
+    saved_unit = s_unit;
     s_unit = unit;
-    rc = read_regs_locked(fc, addr, qty, out, s_retries_read);
-    s_unit = saved;
-    unlock_mbtcp();
+    rc = read_holding_registers(address, quantity, registers, s_retries_read);
+    s_unit = saved_unit;
+    unlock_client();
     return rc;
 }
 
-int mbtcp_write(uint8_t unit, uint16_t addr, uint16_t value)
+int mbtcp_write(uint8_t unit, uint16_t address, uint16_t value)
 {
-    int rc;
-    uint8_t saved;
+    uint8_t saved_unit;
+    int rc = lock_client();
 
-    rc = lock_mbtcp();
     if (rc != MBTCP_OK) {
         return rc;
     }
-    saved = s_unit;
+    saved_unit = s_unit;
     s_unit = unit;
-    rc = write_register_locked(addr, value, s_retries_write);
-    s_unit = saved;
-    unlock_mbtcp();
+    rc = write_single_register(address, value, 0u);
+    s_unit = saved_unit;
+    unlock_client();
     return rc;
 }
 
-int mbtcp_write_multi(uint8_t unit, uint16_t addr,
-                      uint16_t qty, const uint16_t *values)
+int mbtcp_write_multi(uint8_t unit, uint16_t address, uint16_t quantity,
+                      const uint16_t *registers)
 {
+    uint8_t saved_unit;
     int rc;
-    uint8_t saved;
 
-    if ((values == NULL) || (qty == 0u) || (qty > 123u)) {
+    if ((registers == NULL) || (quantity == 0u) ||
+        (quantity > MODBUS_MAX_WRITE_REGISTERS)) {
         return MBTCP_EINVAL;
     }
 
-    rc = lock_mbtcp();
+    rc = lock_client();
     if (rc != MBTCP_OK) {
         return rc;
     }
-    saved = s_unit;
+    saved_unit = s_unit;
     s_unit = unit;
-    rc = write_registers_locked(addr, qty, values, s_retries_write);
-    s_unit = saved;
-    unlock_mbtcp();
+    rc = write_multiple_registers(address, quantity, registers, 0u);
+    s_unit = saved_unit;
+    unlock_client();
     return rc;
 }
 
 int mbtcp_last_exception(void)
 {
-    return s_last_exc;
+    return s_last_exception;
 }
 
-const char *mbtcp_strerror(int err)
+const char *mbtcp_strerror(int error)
 {
-    switch (err) {
+    switch (error) {
     case MBTCP_OK:          return "ok";
     case MBTCP_ECONN:       return "connect/socket";
     case MBTCP_ESEND:       return "send";
@@ -1365,15 +932,16 @@ const char *mbtcp_strerror(int err)
     }
 }
 
-const char *mbtcp_exception_str(int code)
+const char *mbtcp_exception_str(int exception_code)
 {
-    switch (code) {
+    switch (exception_code) {
     case 1:  return "illegal function";
     case 2:  return "illegal data address";
     case 3:  return "illegal data value";
     case 4:  return "server device failure";
     case 5:  return "acknowledge";
     case 6:  return "server device busy";
+    case 7:  return "negative acknowledge";
     case 8:  return "memory parity error";
     case 10: return "gateway path unavailable";
     case 11: return "gateway target failed";

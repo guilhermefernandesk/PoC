@@ -5,7 +5,7 @@
 #     include lib/mbtcp/mbtcp.mk
 #
 # Adiciona 3 fontes (transporte, codec e mapa) e os includes de mbtcp
-# e tcpprobe. Nao compila mbtcp_demo.c (exemplo/autoteste).
+# e tcpprobe. Nao compila mbtcp_demo.c (exemplo para copiar/adaptar).
 
 ifeq ($(MBTCP_INCLUDED),)
 MBTCP_INCLUDED := 1

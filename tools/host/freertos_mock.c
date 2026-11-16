@@ -9,6 +9,7 @@
 #include "semphr.h"
 #include "FreeRTOS_Sockets.h"
 
+#include <arpa/inet.h>
 #include <errno.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
@@ -127,6 +128,16 @@ int32_t FreeRTOS_setsockopt(Socket_t sock, int32_t level, int32_t opt,
     default:
         return -1;
     }
+}
+
+uint32_t FreeRTOS_inet_addr(const char *ip)
+{
+    struct in_addr address;
+
+    if ((ip == NULL) || (inet_pton(AF_INET, ip, &address) != 1)) {
+        return 0u;
+    }
+    return (uint32_t)address.s_addr;
 }
 
 uint16_t FreeRTOS_htons(uint16_t v)

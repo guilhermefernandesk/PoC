@@ -1,3 +1,6 @@
 tools/__pycache__/
 tools/host/test_mbtcp
+tools/host/test_faults
+tools/host/test_mbtcp_asan
+tools/host/test_faults_asan
 *.o
