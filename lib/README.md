@@ -455,3 +455,5 @@ rodando com `--fieldbus-timeout 0` para o teste de timeout de fieldbus.
 - O perfil de movimento (se o drive ou a aplicacao gera a rampa) ainda precisa
   ser definido com o MOVISUITE.
 - O build STM32/FreeRTOS alvo ainda nao foi executado neste repositorio.
+
+//
