@@ -2,19 +2,27 @@
 """Simulador Modbus TCP para validar o mestre STM32.
 
 Perfis:
-  uhx65a  (default)
-      unit 0, offset 0, process data em 1..pd-count (default 120).
+  uhx15a  (default)
+      unit 0, offset 0, process data fixo em 1..16, espelhando
+      lib/uhx15a/uhx15a_config.h.
       Aceita somente FC03, FC06 e FC23. FC16/FC05/FC15/etc. respondem
-      excecao 01 (illegal function), como o UHX65A.
-      Layout de exemplo (2 eixos, 8 PD cada):
-        eixo 1: 1=control, 2=status, 3..4=setpoint S32, 5..6=actual S32
-        eixo 2: 9=control, 10=status, 11..12=setpoint, 13..14=actual
-      Se o control word tiver o bit 0 ligado, o actual segue o setpoint.
+      excecao 01 (illegal function), como o UHX15A.
+      Mapa:
+        1=AZ control, 2=AZ status, 3..4=AZ setpoint S32, 5..6=AZ actual S32
+        7..8 reservados
+        9=EL control, 10=EL status, 11..12=EL setpoint S32, 13..14=EL actual S32
+        15..16 reservados
+      Escrita permitida:
+        FC06 em 1 e 9 (control words)
+        FC23 em 3..4 e 11..12 (setpoints S32)
+      Status, actual e reservados sao somente leitura (excecao 02).
+      Os eixos comecam com control word = 1 (habilitados); se o bit 0
+      estiver ligado, o actual segue o setpoint.
       Apos --fieldbus-timeout ms sem escrita, o bit 15 do status liga.
 
   generic
       Aceita FC01/02/03/04/05/06/0F/10/14/15/16/17/18/2B.
-      Util para testar o cliente e o mapa fora do perfil SEW.
+      Util para testar o cliente e o driver fora do perfil SEW.
 
 Uso:
     python3 tools/sew_sim.py
@@ -42,6 +50,25 @@ LAST_WRITE = time.time()
 LOCK = threading.RLock()
 ARGS = None
 
+# Mapa UHX15A: espelha lib/uhx15a/uhx15a_config.h.
+UHX15A_POLL_START = 1
+UHX15A_POLL_COUNT = 16
+UHX15A_POLL_END = UHX15A_POLL_START + UHX15A_POLL_COUNT
+
+UHX15A_AZ_CONTROL = 1
+UHX15A_AZ_STATUS = 2
+UHX15A_AZ_TARGET = 3
+UHX15A_AZ_ACTUAL = 5
+
+UHX15A_EL_CONTROL = 9
+UHX15A_EL_STATUS = 10
+UHX15A_EL_TARGET = 11
+UHX15A_EL_ACTUAL = 13
+
+UHX15A_CONTROL_ENABLE = 0x0001
+UHX15A_STATUS_ENABLED = 0x0001
+UHX15A_STATUS_FIELDBUS_TIMEOUT = 0x8000
+
 
 def hexdump(b):
     return " ".join(f"{x:02X}" for x in b)
@@ -55,28 +82,58 @@ def exception(txid, unit, fc, code):
     return mbap(txid, unit, bytes([(fc | 0x80) & 0xFF, code & 0xFF]))
 
 
-def init_state():
-    global LAST_WRITE
+def init_generic_state():
     for i in range(len(REGS)):
         REGS[i] = i & 0xFFFF
         IREGS[i] = (i * 3) & 0xFFFF
         COILS[i] = i & 1
         DISC[i] = (i >> 1) & 1
 
-    if ARGS.profile == "uhx65a":
-        for start in ARGS.axis_starts:
-            for off in range(ARGS.axis_len):
-                REGS[start + off] = 0
+
+def init_state():
+    global LAST_WRITE
+
+    if ARGS.profile == "uhx15a":
+        # Mapa fixo 1..16; cada registrador e' inicializado explicitamente.
+        REGS[UHX15A_AZ_CONTROL] = 1
+        REGS[UHX15A_AZ_STATUS] = 0
+        REGS[UHX15A_AZ_TARGET] = 0
+        REGS[UHX15A_AZ_TARGET + 1] = 0
+        REGS[UHX15A_AZ_ACTUAL] = 0
+        REGS[UHX15A_AZ_ACTUAL + 1] = 0
+        REGS[7] = 0
+        REGS[8] = 0
+
+        REGS[UHX15A_EL_CONTROL] = 1
+        REGS[UHX15A_EL_STATUS] = 0
+        REGS[UHX15A_EL_TARGET] = 0
+        REGS[UHX15A_EL_TARGET + 1] = 0
+        REGS[UHX15A_EL_ACTUAL] = 0
+        REGS[UHX15A_EL_ACTUAL + 1] = 0
+        REGS[15] = 0
+        REGS[16] = 0
+    else:
+        init_generic_state()
 
     LAST_WRITE = time.time()
+    update_process_image()
 
 
 def in_reg_range(addr, qty):
-    if ARGS.profile == "uhx65a":
-        start = ARGS.pd_start
-        end = ARGS.pd_start + ARGS.pd_count
-        return addr >= start and (addr + qty) <= end
+    if ARGS.profile == "uhx15a":
+        return (addr >= UHX15A_POLL_START and
+                (addr + qty) <= UHX15A_POLL_END)
     return addr >= 0 and (addr + qty) <= len(REGS)
+
+
+def in_write_range(addr, qty):
+    if ARGS.profile != "uhx15a":
+        return in_reg_range(addr, qty)
+    if qty == 1:
+        return addr in (UHX15A_AZ_CONTROL, UHX15A_EL_CONTROL)
+    if qty == 2:
+        return addr in (UHX15A_AZ_TARGET, UHX15A_EL_TARGET)
+    return False
 
 
 def in_bit_range(addr, qty):
@@ -85,7 +142,7 @@ def in_bit_range(addr, qty):
 
 def update_process_image():
     """Simula o comportamento dos dois eixos no process data."""
-    if ARGS.profile != "uhx65a":
+    if ARGS.profile != "uhx15a":
         return
 
     timed_out = False
@@ -93,32 +150,53 @@ def update_process_image():
         elapsed_ms = (time.time() - LAST_WRITE) * 1000.0
         timed_out = elapsed_ms > ARGS.fieldbus_timeout
 
-    for start in ARGS.axis_starts:
-        if (start + ARGS.axis_len) > len(REGS):
-            continue
+    # ---- Azimute: 1=control, 2=status, 3..4=target, 5..6=actual ----
+    az_control = REGS[UHX15A_AZ_CONTROL]
+    az_status = REGS[UHX15A_AZ_STATUS]
+    az_target = (REGS[UHX15A_AZ_TARGET] << 16) | REGS[UHX15A_AZ_TARGET + 1]
+    if az_target & 0x80000000:
+        az_target -= 0x100000000
 
-        control = REGS[start]
-        status = REGS[start + 1]
-        setpoint = (REGS[start + 2] << 16) | REGS[start + 3]
-        if setpoint & 0x80000000:
-            setpoint -= 0x100000000
+    if az_control & UHX15A_CONTROL_ENABLE:
+        az_status |= UHX15A_STATUS_ENABLED
+        az_actual = az_target
+    else:
+        az_status &= ~UHX15A_STATUS_ENABLED
+        az_actual = 0
 
-        if control & 0x0001:
-            status |= 0x0001
-            actual = setpoint
-        else:
-            status &= ~0x0001
-            actual = 0
+    if timed_out:
+        az_status |= UHX15A_STATUS_FIELDBUS_TIMEOUT
+    else:
+        az_status &= ~UHX15A_STATUS_FIELDBUS_TIMEOUT
 
-        if timed_out:
-            status |= 0x8000
-        else:
-            status &= ~0x8000
+    REGS[UHX15A_AZ_STATUS] = az_status & 0xFFFF
+    az_actual &= 0xFFFFFFFF
+    REGS[UHX15A_AZ_ACTUAL] = (az_actual >> 16) & 0xFFFF
+    REGS[UHX15A_AZ_ACTUAL + 1] = az_actual & 0xFFFF
 
-        REGS[start + 1] = status & 0xFFFF
-        actual &= 0xFFFFFFFF
-        REGS[start + 4] = (actual >> 16) & 0xFFFF
-        REGS[start + 5] = actual & 0xFFFF
+    # ---- Elevacao: 9=control, 10=status, 11..12=target, 13..14=actual ----
+    el_control = REGS[UHX15A_EL_CONTROL]
+    el_status = REGS[UHX15A_EL_STATUS]
+    el_target = (REGS[UHX15A_EL_TARGET] << 16) | REGS[UHX15A_EL_TARGET + 1]
+    if el_target & 0x80000000:
+        el_target -= 0x100000000
+
+    if el_control & UHX15A_CONTROL_ENABLE:
+        el_status |= UHX15A_STATUS_ENABLED
+        el_actual = el_target
+    else:
+        el_status &= ~UHX15A_STATUS_ENABLED
+        el_actual = 0
+
+    if timed_out:
+        el_status |= UHX15A_STATUS_FIELDBUS_TIMEOUT
+    else:
+        el_status &= ~UHX15A_STATUS_FIELDBUS_TIMEOUT
+
+    REGS[UHX15A_EL_STATUS] = el_status & 0xFFFF
+    el_actual &= 0xFFFFFFFF
+    REGS[UHX15A_EL_ACTUAL] = (el_actual >> 16) & 0xFFFF
+    REGS[UHX15A_EL_ACTUAL + 1] = el_actual & 0xFFFF
 
 
 def read_bits(table, addr, qty):
@@ -137,11 +215,11 @@ def write_bits(table, addr, qty, data):
 def device_id_objects():
     return {
         0x00: b"SEW-EURODRIVE",
-        0x01: b"UHX65A-SIM",
+        0x01: b"UHX15A-SIM",
         0x02: b"1.0",
         0x03: b"https://www.sew-eurodrive.com",
-        0x04: b"UHX65A Simulator",
-        0x05: b"UHX65A",
+        0x04: b"UHX15A Simulator",
+        0x05: b"UHX15A",
         0x06: b"sew_sim",
     }
 
@@ -200,7 +278,7 @@ def process(frame):
     if ARGS.latency_ms > 0:
         time.sleep(ARGS.latency_ms / 1000.0)
 
-    if ARGS.profile == "uhx65a" and fc not in (3, 6, 23):
+    if ARGS.profile == "uhx15a" and fc not in (3, 6, 23):
         return exception(txid, unit, fc, 1)
 
     with LOCK:
@@ -256,7 +334,7 @@ def process(frame):
             if len(pdu) != 5:
                 return exception(txid, unit, fc, 3)
             addr, value = struct.unpack(">HH", pdu[1:5])
-            if not in_reg_range(addr, 1):
+            if not in_write_range(addr, 1):
                 return exception(txid, unit, fc, 2)
             REGS[addr] = value
             LAST_WRITE = time.time()
@@ -286,7 +364,7 @@ def process(frame):
                 return exception(txid, unit, fc, 3)
             if len(pdu) != 6 + bc:
                 return exception(txid, unit, fc, 3)
-            if not in_reg_range(addr, qty):
+            if not in_write_range(addr, qty):
                 return exception(txid, unit, fc, 2)
             for i in range(qty):
                 REGS[addr + i] = struct.unpack(">H", pdu[6 + 2 * i:8 + 2 * i])[0]
@@ -298,7 +376,7 @@ def process(frame):
             if len(pdu) != 7:
                 return exception(txid, unit, fc, 3)
             addr, and_mask, or_mask = struct.unpack(">HHH", pdu[1:7])
-            if not in_reg_range(addr, 1):
+            if not in_write_range(addr, 1):
                 return exception(txid, unit, fc, 2)
             cur = REGS[addr]
             REGS[addr] = ((cur & and_mask) | (or_mask & (~and_mask))) & 0xFFFF
@@ -314,7 +392,7 @@ def process(frame):
                 return exception(txid, unit, fc, 3)
             if wbc != 2 * wqty or len(pdu) != 10 + wbc:
                 return exception(txid, unit, fc, 3)
-            if not in_reg_range(raddr, rqty) or not in_reg_range(waddr, wqty):
+            if not in_reg_range(raddr, rqty) or not in_write_range(waddr, wqty):
                 return exception(txid, unit, fc, 2)
 
             for i in range(wqty):
@@ -432,15 +510,6 @@ def client_thread(conn, addr):
         conn.close()
 
 
-def parse_axis_starts(text):
-    out = []
-    for part in text.split(","):
-        part = part.strip()
-        if part:
-            out.append(int(part, 0))
-    return out
-
-
 def main():
     global ARGS
 
@@ -448,29 +517,14 @@ def main():
     ap.add_argument("--host", default="0.0.0.0")
     ap.add_argument("--port", type=int, default=1502)
     ap.add_argument("--unit", type=int, default=0)
-    ap.add_argument("--profile", choices=["uhx65a", "generic"],
-                    default="uhx65a")
-    ap.add_argument("--pd-start", type=int, default=1)
-    ap.add_argument("--pd-count", type=int, default=120)
-    ap.add_argument("--axis-start", default="1,9",
-                    help="inicios dos eixos, separados por virgula")
-    ap.add_argument("--axis-len", type=int, default=8)
+    ap.add_argument("--profile", choices=["uhx15a", "generic"],
+                    default="uhx15a")
     ap.add_argument("--fieldbus-timeout", type=int, default=1000,
                     help="ms sem escrita para ligar o bit 15 do status; 0 desliga")
     ap.add_argument("--latency-ms", type=float, default=0.0)
     ap.add_argument("--drop-rate", type=float, default=0.0)
     ap.add_argument("--fault-fc", type=int, default=-1)
     args = ap.parse_args()
-
-    args.axis_starts = parse_axis_starts(args.axis_start)
-    if args.pd_start < 0 or args.pd_count < 1 or args.pd_start + args.pd_count > len(REGS):
-        ap.error("area de process data fora de 0..2047")
-    if args.axis_len < 6:
-        ap.error("--axis-len precisa ser >= 6 (control/status/setpoint/actual)")
-    if args.profile == "uhx65a":
-        for start in args.axis_starts:
-            if start < args.pd_start or (start + args.axis_len) > (args.pd_start + args.pd_count):
-                ap.error("eixo fora da area de process data")
 
     ARGS = args
     init_state()
@@ -482,9 +536,12 @@ def main():
 
     print(f"sew_sim perfil={args.profile} ouvindo em {args.host}:{args.port} "
           f"unit={args.unit}")
-    print(f"PD={args.pd_start}..{args.pd_start + args.pd_count - 1} "
-          f"eixos={args.axis_starts} len={args.axis_len} "
-          f"fieldbus_timeout={args.fieldbus_timeout}ms")
+    if args.profile == "uhx15a":
+        print("PD=1..16 AZ=1/2/3..4/5..6 EL=9/10/11..12/13..14 "
+              "(status/actual/reservados read-only)")
+    else:
+        print(f"PD=0..{len(REGS) - 1} (perfil generico)")
+    print(f"fieldbus_timeout={args.fieldbus_timeout}ms")
     print("Ctrl+C para sair\n")
 
     try:

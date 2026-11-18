@@ -5,11 +5,11 @@
  *   - um socket TCP, um mutex, sem task permanente;
  *   - FC03 (ler holding registers);
  *   - FC06 (escrever um register);
- *   - FC16 (escrever varios registers, mantida por compatibilidade);
  *   - FC23 (ler e escrever registers na mesma transacao);
+ *   - mbtcp_fc() para leitura/escrita pontual por function code;
  *   - PDU cru para qualquer outra function code.
  *
- * Perfil alvo: SEW UHX65A (unit 0, offset 0, FC03/FC06/FC23).
+ * Perfil alvo: SEW UHX15A (unit 0, offset 0, FC03/FC06/FC23).
  *
  * Thread-safety: as funcoes publicas podem ser chamadas de qualquer task;
  * o acesso ao socket e' serializado por um mutex interno.
@@ -17,13 +17,14 @@
 #ifndef MBTCP_H
 #define MBTCP_H
 
+#include <stdbool.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define MBTCP_VERSION "3.0.0"
+#define MBTCP_VERSION "4.0.0"
 
 /* ------------------------------------------------------------------ */
 /* Configuracao                                                        */
@@ -57,7 +58,6 @@ extern "C" {
 enum {
     MBTCP_FUNCTION_READ_HOLDING_REGISTERS = 0x03,
     MBTCP_FUNCTION_WRITE_SINGLE_REGISTER = 0x06,
-    MBTCP_FUNCTION_WRITE_MULTIPLE_REGISTERS = 0x10,
     MBTCP_FUNCTION_READ_WRITE_MULTIPLE_REGISTERS = 0x17
 };
 
@@ -80,8 +80,8 @@ enum {
 
 typedef struct {
     const char *ip;          /* "a.b.c.d"                                  */
-    uint16_t port;           /* 502 no UHX65A; 1502 no simulador           */
-    uint8_t unit;            /* UHX65A: 0                                  */
+    uint16_t port;           /* 502 no UHX15A; 1502/1503 no simulador      */
+    uint8_t unit;            /* UHX15A: 0                                  */
     uint32_t timeout_ms;     /* 0 = MBTCP_DEFAULT_TIMEOUT_MS               */
     uint8_t retries_read;    /* tentativas extras em leitura (0..5)        */
     uint16_t rx_buf;         /* 0 = default do stack                       */
@@ -103,7 +103,7 @@ typedef struct {
     uint8_t connected;
 } mbtcp_stats_t;
 
-/* Preenche a configuracao com os defaults do UHX65A. */
+/* Preenche a configuracao com os defaults do UHX15A. */
 void mbtcp_cfg_default(mbtcp_cfg_t *cfg);
 
 /*
@@ -117,6 +117,9 @@ int mbtcp_connect(void);
 
 /* Fecha o socket. Seguro chamar sem ter aberto. */
 void mbtcp_disconnect(void);
+
+/* Estado atual do socket. */
+bool mbtcp_is_connected(void);
 
 /* Troca o unit ID da sessao. */
 int mbtcp_set_unit(uint8_t unit);
@@ -145,30 +148,24 @@ int mbtcp_read_write_registers(uint16_t read_address, uint16_t read_quantity,
                                const uint16_t *write_registers);
 
 /*
+ * Leitura/escrita pontual por function code.
+ *
+ *   fc == 0x03: le quantity registers de address para registers.
+ *   fc == 0x06: escreve registers[0] em address; quantity deve ser 1.
+ *
+ * Retorna MBTCP_OK ou erro. Outras FCs retornam MBTCP_EINVAL; use
+ * mbtcp_read_write_registers() para FC23 ou mbtcp_raw_pdu() para o resto.
+ */
+int mbtcp_fc(uint8_t fc, uint16_t address, uint16_t quantity,
+             uint16_t *registers);
+
+/*
  * PDU cru: qualquer function code. A resposta inclui o function code.
  * Retorna MBTCP_EEXCEPTION se o slave responder uma excecao.
  */
 int mbtcp_raw_pdu(const uint8_t *request_pdu, uint16_t request_pdu_length,
                   uint8_t *response_pdu, uint16_t response_capacity,
                   uint16_t *response_pdu_length);
-
-/* ------------------------------------------------------------------ */
-/* Compatibilidade com a versao anterior                                */
-/* ------------------------------------------------------------------ */
-
-int mbtcp_open(const char *ip, uint16_t port, uint32_t timeout_ms);
-void mbtcp_close(void);
-
-/* FC03, com unit explicito. */
-int mbtcp_read(uint8_t unit, uint8_t function_code, uint16_t address,
-               uint16_t quantity, uint16_t *registers);
-
-/* FC06, com unit explicito. */
-int mbtcp_write(uint8_t unit, uint16_t address, uint16_t value);
-
-/* FC16, com unit explicito. O UHX65A nao garante FC16. */
-int mbtcp_write_multi(uint8_t unit, uint16_t address, uint16_t quantity,
-                      const uint16_t *registers);
 
 /* ------------------------------------------------------------------ */
 /* Diagnostico                                                         */

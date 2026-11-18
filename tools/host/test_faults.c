@@ -34,7 +34,8 @@
     } while (0)
 
 typedef enum {
-    SCENARIO_BAD_LENGTH = 0,
+    SCENARIO_OK = 0,
+    SCENARIO_BAD_LENGTH,
     SCENARIO_WRONG_TRANSACTION,
     SCENARIO_EXCEPTION,
     SCENARIO_TIMEOUT,
@@ -334,6 +335,7 @@ static void open_client_ex(uint16_t port, uint8_t retries,
     CHECK(rc == MBTCP_OK, "init");
     rc = mbtcp_connect();
     CHECK(rc == MBTCP_OK, "connect");
+    CHECK(mbtcp_is_connected(), "connected");
 }
 
 static void open_client(uint16_t port)
@@ -359,7 +361,8 @@ static void run_single_case(scenario_t scenario, int expected_error)
         CHECK(value == 0x1234u, "read value");
     }
 
-    mbtcp_close();
+    mbtcp_disconnect();
+    CHECK(!mbtcp_is_connected(), "disconnected after single case");
     stop_server(&server);
 }
 
@@ -379,7 +382,8 @@ static void test_reconnect(void)
     CHECK(rc == MBTCP_OK, "reconnect second read");
     CHECK(value == 0x1234u, "reconnect value");
 
-    mbtcp_close();
+    mbtcp_disconnect();
+    CHECK(!mbtcp_is_connected(), "disconnected after reconnect");
     stop_server(&server);
 }
 
@@ -397,7 +401,37 @@ static void test_timeout_retry(void)
     CHECK(rc == MBTCP_OK, "timeout retry read");
     CHECK(value == 0x1234u, "timeout retry value");
 
-    mbtcp_close();
+    mbtcp_disconnect();
+    CHECK(!mbtcp_is_connected(), "disconnected after timeout retry");
+    stop_server(&server);
+}
+
+static void test_generic_fc(void)
+{
+    server_ctx_t server;
+    uint16_t value = 0u;
+
+    CHECK(start_server(&server, SCENARIO_OK) == 0, "start generic fc");
+    open_client(server.port);
+
+    CHECK(mbtcp_fc(MBTCP_FUNCTION_READ_HOLDING_REGISTERS, 1u, 1u, &value) ==
+          MBTCP_OK, "mbtcp_fc read");
+    CHECK(value == 0x1234u, "mbtcp_fc value");
+
+    value = 0x5678u;
+    CHECK(mbtcp_fc(MBTCP_FUNCTION_WRITE_SINGLE_REGISTER, 1u, 2u, &value) ==
+          MBTCP_EINVAL, "mbtcp_fc fc06 quantity");
+    CHECK(mbtcp_fc(MBTCP_FUNCTION_READ_HOLDING_REGISTERS, 1u, 0u, &value) ==
+          MBTCP_EINVAL, "mbtcp_fc fc03 quantity");
+    CHECK(mbtcp_fc(MBTCP_FUNCTION_READ_HOLDING_REGISTERS, 1u, 1u, NULL) ==
+          MBTCP_EINVAL, "mbtcp_fc fc03 null");
+    CHECK(mbtcp_fc(MBTCP_FUNCTION_WRITE_SINGLE_REGISTER, 1u, 1u, NULL) ==
+          MBTCP_EINVAL, "mbtcp_fc fc06 null");
+    CHECK(mbtcp_fc(0x10u, 1u, 1u, &value) == MBTCP_EINVAL,
+          "mbtcp_fc rejects fc16");
+
+    mbtcp_disconnect();
+    CHECK(!mbtcp_is_connected(), "disconnected after generic fc");
     stop_server(&server);
 }
 
@@ -410,6 +444,7 @@ int main(void)
     run_single_case(SCENARIO_PARTIAL, MBTCP_OK);
     test_reconnect();
     test_timeout_retry();
+    test_generic_fc();
 
     puts("test_faults: ok");
     return 0;

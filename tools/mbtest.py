@@ -5,17 +5,17 @@ Uso:
     python3 mbtest.py HOST PORT UNIT FC ADDR [ARG...]
 
 Exemplos:
-    python3 mbtest.py 127.0.0.1 1502 0 3 1 8
-        FC03, le 8 registradores em 1..8.
+    python3 mbtest.py 127.0.0.1 1502 0 3 1 16
+        FC03, le 16 registradores em 1..16 (process data do UHX15A).
 
     python3 mbtest.py 127.0.0.1 1502 0 6 1 1
-        FC06, escreve 1 no registrador 1 (control word).
+        FC06, escreve 1 no registrador 1 (control word do azimute).
 
-    python3 mbtest.py 127.0.0.1 1502 0 23 1 8 1 1 0 0 0 0 0 0 0
-        FC23: le 8 em 1, escreve 8 em 1 (control=1, setpoint=0).
+    python3 mbtest.py 127.0.0.1 1502 0 23 3 2 3 0 45
+        FC23: le 2 em 3 e escreve 2 em 3 (setpoint S32 = 45 no azimute).
 
     python3 mbtest.py 127.0.0.1 1502 0 16 10 1 2 3
-        FC16, escreve 3 registradores.
+        FC16, escreve 3 registradores (o perfil uhx15a rejeita).
 
     python3 mbtest.py 127.0.0.1 1502 0 20 1 0 4
         FC20, le 4 registradores do file 1, record 0.

@@ -35,14 +35,12 @@
 #define MODBUS_EXCEPTION_FLAG 0x80u
 #define MODBUS_EXCEPTION_PDU_SIZE 2u
 #define MODBUS_MAX_READ_REGISTERS 125u
-#define MODBUS_MAX_WRITE_REGISTERS 123u
 #define MODBUS_MAX_READ_WRITE_WRITE_REGISTERS 121u
 
 /* O campo length do MBAP inclui o unit ID e a PDU. */
 #define MODBUS_MIN_LENGTH_FIELD 2u
 #define MODBUS_MAX_LENGTH_FIELD (MBTCP_MAX_FRAME - MODBUS_TCP_MBAP_PREFIX_SIZE)
 
-#define MODBUS_MAX_WRITE_PDU_SIZE (6u + (2u * MODBUS_MAX_WRITE_REGISTERS))
 #define MODBUS_MAX_READ_WRITE_PDU_SIZE \
     (10u + (2u * MODBUS_MAX_READ_WRITE_WRITE_REGISTERS))
 
@@ -553,39 +551,6 @@ static int write_single_register(uint16_t address, uint16_t value,
     return MBTCP_OK;
 }
 
-static int write_multiple_registers(uint16_t address, uint16_t quantity,
-                                    const uint16_t *registers, uint8_t retries)
-{
-    uint8_t request[MODBUS_MAX_WRITE_PDU_SIZE];
-    const uint8_t *response;
-    uint16_t response_length;
-    uint16_t request_length =
-        (uint16_t)(6u + (2u * quantity));
-    uint16_t index;
-    int rc;
-
-    request[0] = MBTCP_FUNCTION_WRITE_MULTIPLE_REGISTERS;
-    write_u16(request + 1u, address);
-    write_u16(request + 3u, quantity);
-    request[5] = (uint8_t)(2u * quantity);
-
-    for (index = 0u; index < quantity; index++) {
-        write_u16(request + 6u + (2u * index), registers[index]);
-    }
-
-    rc = perform_transaction(request, request_length, &response,
-                             &response_length, retries);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-
-    if ((response_length != 5u) ||
-        (memcmp(response, request, 5u) != 0)) {
-        return bad_frame();
-    }
-    return MBTCP_OK;
-}
-
 static int read_write_registers(uint16_t read_address, uint16_t read_quantity,
                                 uint16_t *read_registers,
                                 uint16_t write_address, uint16_t write_quantity,
@@ -735,26 +700,9 @@ const mbtcp_stats_t *mbtcp_stats(void)
     return &s_stats;
 }
 
-int mbtcp_open(const char *ip, uint16_t port, uint32_t timeout_ms)
+bool mbtcp_is_connected(void)
 {
-    mbtcp_cfg_t cfg;
-    int rc;
-
-    mbtcp_cfg_default(&cfg);
-    cfg.ip = ip;
-    cfg.port = port;
-    cfg.timeout_ms = timeout_ms;
-
-    rc = mbtcp_init(&cfg);
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    return mbtcp_connect();
-}
-
-void mbtcp_close(void)
-{
-    mbtcp_disconnect();
+    return (s_stats.connected != 0u);
 }
 
 int mbtcp_read_holding(uint16_t address, uint16_t quantity,
@@ -812,6 +760,22 @@ int mbtcp_read_write_registers(uint16_t read_address, uint16_t read_quantity,
     return rc;
 }
 
+int mbtcp_fc(uint8_t fc, uint16_t address, uint16_t quantity,
+             uint16_t *registers)
+{
+    switch (fc) {
+    case MBTCP_FUNCTION_READ_HOLDING_REGISTERS:
+        return mbtcp_read_holding(address, quantity, registers);
+    case MBTCP_FUNCTION_WRITE_SINGLE_REGISTER:
+        if ((registers == NULL) || (quantity != 1u)) {
+            return MBTCP_EINVAL;
+        }
+        return mbtcp_write_register(address, registers[0]);
+    default:
+        return MBTCP_EINVAL;
+    }
+}
+
 int mbtcp_raw_pdu(const uint8_t *request_pdu, uint16_t request_pdu_length,
                   uint8_t *response_pdu, uint16_t response_capacity,
                   uint16_t *response_pdu_length)
@@ -845,69 +809,6 @@ int mbtcp_raw_pdu(const uint8_t *request_pdu, uint16_t request_pdu_length,
         }
     }
 
-    unlock_client();
-    return rc;
-}
-
-int mbtcp_read(uint8_t unit, uint8_t function_code, uint16_t address,
-               uint16_t quantity, uint16_t *registers)
-{
-    uint8_t saved_unit;
-    int rc;
-
-    if ((registers == NULL) || (quantity == 0u) ||
-        (quantity > MODBUS_MAX_READ_REGISTERS) ||
-        (function_code != MBTCP_FUNCTION_READ_HOLDING_REGISTERS)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_client();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    saved_unit = s_unit;
-    s_unit = unit;
-    rc = read_holding_registers(address, quantity, registers, s_retries_read);
-    s_unit = saved_unit;
-    unlock_client();
-    return rc;
-}
-
-int mbtcp_write(uint8_t unit, uint16_t address, uint16_t value)
-{
-    uint8_t saved_unit;
-    int rc = lock_client();
-
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    saved_unit = s_unit;
-    s_unit = unit;
-    rc = write_single_register(address, value, 0u);
-    s_unit = saved_unit;
-    unlock_client();
-    return rc;
-}
-
-int mbtcp_write_multi(uint8_t unit, uint16_t address, uint16_t quantity,
-                      const uint16_t *registers)
-{
-    uint8_t saved_unit;
-    int rc;
-
-    if ((registers == NULL) || (quantity == 0u) ||
-        (quantity > MODBUS_MAX_WRITE_REGISTERS)) {
-        return MBTCP_EINVAL;
-    }
-
-    rc = lock_client();
-    if (rc != MBTCP_OK) {
-        return rc;
-    }
-    saved_unit = s_unit;
-    s_unit = unit;
-    rc = write_multiple_registers(address, quantity, registers, 0u);
-    s_unit = saved_unit;
     unlock_client();
     return rc;
 }
