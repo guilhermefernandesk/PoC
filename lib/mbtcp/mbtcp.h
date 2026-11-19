@@ -46,11 +46,6 @@ extern "C" {
 #define MBTCP_MAX_RETRIES 5u
 #define MBTCP_MUTEX_TIMEOUT_MS 3000u
 
-/* 1 = loga TX/RX em hexadecimal via tcpprobe. */
-#ifndef MBTCP_TRACE
-#define MBTCP_TRACE 0
-#endif
-
 /* ------------------------------------------------------------------ */
 /* Function codes usadas pelo cliente                                  */
 /* ------------------------------------------------------------------ */

@@ -1,7 +1,6 @@
 # uhx15a.mk - fragmento de Makefile do driver UHX15A
 #
 # Uso no Makefile do projeto:
-#     include lib/tcpprobe/tcpprobe.mk
 #     include lib/mbtcp/mbtcp.mk
 #     include lib/uhx15a/uhx15a.mk
 

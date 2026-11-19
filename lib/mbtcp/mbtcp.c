@@ -12,7 +12,7 @@
  *  - sem task permanente: a aplicacao chama a API de uma task existente.
  */
 #include "mbtcp.h"
-#include "tcpprobe.h"
+#include "uhx15a.h"
 
 #include <string.h>
 
@@ -178,8 +178,6 @@ static int open_socket(void)
     s_socket = FreeRTOS_socket(FREERTOS_AF_INET, FREERTOS_SOCK_STREAM,
                                FREERTOS_IPPROTO_TCP);
     if (s_socket == FREERTOS_INVALID_SOCKET) {
-        tcpprobe_log("mbtcp: socket() falhou (heap=%u)",
-                     (unsigned)xPortGetFreeHeapSize());
         s_stats.connect_errors++;
         return MBTCP_ECONN;
     }
@@ -219,8 +217,6 @@ static int open_socket(void)
     address.sin_addr = s_ip_address;
 
     if (FreeRTOS_connect(s_socket, &address, sizeof(address)) < 0) {
-        tcpprobe_log("mbtcp: connect %s:%u falhou",
-                     s_ip_text, (unsigned)s_port);
         s_stats.connect_errors++;
         close_socket();
         return MBTCP_ECONN;
@@ -228,8 +224,6 @@ static int open_socket(void)
 
     s_stats.connected = 1u;
     s_stats.connects++;
-    tcpprobe_log("mbtcp: conectado %s:%u unit=%u",
-                 s_ip_text, (unsigned)s_port, (unsigned)s_unit);
     return MBTCP_OK;
 }
 
@@ -406,9 +400,6 @@ static int perform_transaction(const uint8_t *request_pdu,
         memcpy(s_tx_frame + MODBUS_TCP_HEADER_SIZE,
                request_pdu, request_pdu_length);
 
-#if MBTCP_TRACE
-        tcpprobe_log_hex("mb tx", s_tx_frame, (unsigned)request_frame_length);
-#endif
         s_stats.tx_count++;
 
         started = xTaskGetTickCount();
@@ -418,13 +409,6 @@ static int perform_transaction(const uint8_t *request_pdu,
         if (rc == MBTCP_OK) {
             rc = receive_response_frame(&response_frame_length, deadline);
         }
-
-#if MBTCP_TRACE
-        if (response_frame_length != 0u) {
-            tcpprobe_log_hex("mb rx", s_rx_frame,
-                             (unsigned)response_frame_length);
-        }
-#endif
 
         s_stats.latency_ms = (uint32_t)(xTaskGetTickCount() - started) *
                              (uint32_t)portTICK_PERIOD_MS;

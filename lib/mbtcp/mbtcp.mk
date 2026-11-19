@@ -11,7 +11,6 @@
 ifeq ($(MBTCP_INCLUDED),)
 MBTCP_INCLUDED := 1
 MBTCP_DIR := $(patsubst %/,%,$(dir $(lastword $(MAKEFILE_LIST))))
-TCPPROBE_DIR ?= $(abspath $(MBTCP_DIR)/../tcpprobe)
 C_SOURCES  += $(MBTCP_DIR)/mbtcp.c
-C_INCLUDES += -I$(MBTCP_DIR) -I$(TCPPROBE_DIR)
+C_INCLUDES += -I$(MBTCP_DIR)
 endif
