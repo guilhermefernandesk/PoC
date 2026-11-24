@@ -1,0 +1,28 @@
+---
+:project:
+  :use_exceptions: FALSE
+  :use_test_preprocessor: TRUE
+  :build_root: build
+  :release_build: TRUE
+
+:paths:
+  :test:
+    - test/**
+  :source:
+    - app/**
+  :include:
+    - app/**
+
+:plugins:
+  :load_paths: []
+  :enabled:
+    - stdout_pretty_tests_report
+    - module_generator
+
+:cmock:
+  :mock_prefix: mock_
+  :plugins:
+    - ignore
+    - callback
+    - expect_any_args
+  :treat_externs: :include

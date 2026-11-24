@@ -1,0 +1,11 @@
+build/
+.docs/
+*.log
+__pycache__/
+.pytest_cache/
+reports/
+htmlcov/
+.coverage
+*.bin
+*.elf
+*.map

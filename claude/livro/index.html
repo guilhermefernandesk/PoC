@@ -1,0 +1,2428 @@
+<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Claude Code para Firmware STM32 + GitLab — Livro de estudos</title><style>
+:root {
+  --bg: #0f1419; --panel: #171e26; --fg: #dce4ec; --muted: #9aa8b6;
+  --accent: #6cc0ff; --border: #2b3845; --code: #0b1015; --ok: #7ee2a8;
+  --sidebar: 290px;
+}
+body.light {
+  --bg: #f7f9fb; --panel: #ffffff; --fg: #1d2833; --muted: #5c6b7a;
+  --accent: #0b62b3; --border: #dce4ec; --code: #eef2f6; --ok: #0a7a3d;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { margin: 0; background: var(--bg); color: var(--fg);
+  font: 16px/1.65 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+#progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--accent); z-index: 50; width: 0; }
+#sidebar { position: fixed; inset: 0 auto 0 0; width: var(--sidebar); background: var(--panel);
+  border-right: 1px solid var(--border); padding: 18px 14px 40px; overflow-y: auto; z-index: 20; }
+#sidebar h1 { font-size: 18px; margin: 0 0 4px; }
+#sidebar .sub { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+#search { width: 100%; padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+  background: var(--bg); color: var(--fg); margin-bottom: 12px; }
+#toc a { display: block; color: var(--muted); text-decoration: none; padding: 3px 6px;
+  border-radius: 4px; font-size: 13px; }
+#toc a:hover, #toc a.active { color: var(--accent); background: rgba(108,192,255,.09); }
+#toc .group { margin-top: 14px; font-weight: 700; color: var(--fg); font-size: 13px; }
+#toc .sub-item { padding-left: 14px; }
+#toc a.hidden { display: none; }
+main { margin-left: var(--sidebar); padding: 36px clamp(20px, 5vw, 72px) 100px; max-width: 1100px; }
+section.doc { margin-bottom: 70px; }
+h1 { font-size: 30px; line-height: 1.25; margin-top: 10px; }
+h2 { font-size: 23px; margin-top: 38px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+h3 { font-size: 19px; margin-top: 28px; }
+h4 { font-size: 16px; margin-top: 22px; }
+a { color: var(--accent); }
+p, li { max-width: 82ch; }
+li { margin: 4px 0; }
+code { background: var(--code); padding: 1px 5px; border-radius: 4px; font-size: .9em; }
+.code-wrap { position: relative; margin: 16px 0; }
+pre { background: var(--code); border: 1px solid var(--border); border-radius: 8px; padding: 16px;
+  overflow-x: auto; font-size: 13.5px; line-height: 1.5; }
+pre code { background: none; padding: 0; }
+.copy { position: absolute; right: 8px; top: 8px; background: var(--panel); color: var(--muted);
+  border: 1px solid var(--border); border-radius: 5px; font-size: 11px; padding: 3px 8px; cursor: pointer; }
+.copy:hover { color: var(--accent); }
+blockquote { border-left: 3px solid var(--accent); margin: 18px 0; padding: 8px 16px;
+  background: rgba(108,192,255,.06); color: var(--muted); }
+table { border-collapse: collapse; width: 100%; margin: 18px 0; font-size: 14px; display: block; overflow-x: auto; }
+th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+th { background: var(--panel); }
+hr { border: 0; border-top: 1px solid var(--border); margin: 32px 0; }
+.top-actions { position: fixed; right: 18px; bottom: 18px; display: flex; gap: 8px; z-index: 30; }
+.top-actions button { background: var(--panel); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 20px; padding: 8px 14px; cursor: pointer; font-size: 13px; }
+@media print {
+  #sidebar, #progress, .top-actions, .copy { display: none !important; }
+  main { margin: 0; padding: 0; max-width: none; }
+  section.doc { page-break-before: always; }
+  a { color: inherit; text-decoration: none; }
+  pre, table { white-space: pre-wrap; word-break: break-word; }
+  body { background: #fff; color: #000; font-size: 11pt; }
+}
+@media (max-width: 860px) {
+  #sidebar { position: static; width: 100%; height: auto; border-right: 0; border-bottom: 1px solid var(--border); }
+  main { margin-left: 0; }
+}
+</style></head><body><div id="progress"></div><aside id="sidebar"><h1>Claude Code · STM32 · GitLab</h1><div class="sub">Livro de estudos — workshop para devs</div><input id="search" placeholder="Buscar no índice..." autocomplete="off"><nav id="toc"><div class="group">Introdução</div><a class="" href="#d0-workshop-claude-code-para-firmware-stm32-com-gitlab" data-target="d0-workshop-claude-code-para-firmware-stm32-com-gitlab">Workshop — Claude Code para Firmware STM32 com GitLab</a><a class="sub-item" href="#d0-1-para-quem-e" data-target="d0-1-para-quem-e">1. Para quem é</a><a class="sub-item" href="#d0-2-pre-requisitos" data-target="d0-2-pre-requisitos">2. Pré-requisitos</a><a class="sub-item" href="#d0-3-arvore-do-material" data-target="d0-3-arvore-do-material">3. Árvore do material</a><a class="sub-item" href="#d0-4-ordem-de-leitura" data-target="d0-4-ordem-de-leitura">4. Ordem de leitura</a><a class="sub-item" href="#d0-5-gerar-o-livro-html" data-target="d0-5-gerar-o-livro-html">5. Gerar o livro HTML</a><a class="sub-item" href="#d0-6-ministrar-o-workshop" data-target="d0-6-ministrar-o-workshop">6. Ministrar o workshop</a><a class="sub-item" href="#d0-7-gerar-a-video-aula" data-target="d0-7-gerar-a-video-aula">7. Gerar a vídeo-aula</a><a class="sub-item" href="#d0-8-principios-que-atravessam-todo-o-material" data-target="d0-8-principios-que-atravessam-todo-o-material">8. Princípios que atravessam todo o material</a><a class="sub-item" href="#d0-9-avisos" data-target="d0-9-avisos">9. Avisos</a><div class="group">00 — Por que firmware é diferente</div><a class="" href="#d1-modulo-00-por-que-firmware-e-diferente-e-por-que-isso-muda-o-uso-da-ia" data-target="d1-modulo-00-por-que-firmware-e-diferente-e-por-que-isso-muda-o-uso-da-ia">Módulo 00 — Por que firmware é diferente (e por que isso muda o uso da IA)</a><a class="sub-item" href="#d1-1-o-problema-que-este-workshop-resolve" data-target="d1-1-o-problema-que-este-workshop-resolve">1. O problema que este workshop resolve</a><a class="sub-item" href="#d1-2-o-mapa-de-6-camadas" data-target="d1-2-o-mapa-de-6-camadas">2. O mapa de 6 camadas</a><a class="sub-item" href="#d1-3-superficies-uma-config-varios-lugares" data-target="d1-3-superficies-uma-config-varios-lugares">3. Superfícies: uma config, vários lugares</a><a class="sub-item" href="#d1-4-exercicio-00-explorar-sem-editar" data-target="d1-4-exercicio-00-explorar-sem-editar">4. Exercício 00 — explorar sem editar</a><a class="sub-item" href="#d1-5-erros-comuns-de-quem-vem-de-github-copilot" data-target="d1-5-erros-comuns-de-quem-vem-de-github-copilot">5. Erros comuns de quem vem de GitHub Copilot</a><a class="sub-item" href="#d1-6-checklist-de-conclusao" data-target="d1-6-checklist-de-conclusao">6. Checklist de conclusão</a><div class="group">01 — Contexto</div><a class="" href="#d2-modulo-01-contexto-que-nao-cabe-no-codigo" data-target="d2-modulo-01-contexto-que-nao-cabe-no-codigo">Módulo 01 — Contexto que não cabe no código</a><a class="sub-item" href="#d2-1-a-regra-de-ouro" data-target="d2-1-a-regra-de-ouro">1. A regra de ouro</a><a class="sub-item" href="#d2-2-estrutura-que-funciona-para-firmware" data-target="d2-2-estrutura-que-funciona-para-firmware">2. Estrutura que funciona para firmware</a><a class="sub-item" href="#d2-3-alimente-o-contexto-no-prompt-nao-so-no-arquivo" data-target="d2-3-alimente-o-contexto-no-prompt-nao-so-no-arquivo">3. Alimente o contexto no prompt, não só no arquivo</a><a class="sub-item" href="#d2-4-specmd-antes-de-implementar" data-target="d2-4-specmd-antes-de-implementar">4. `SPEC.md` antes de implementar</a><a class="sub-item" href="#d2-5-regras-por-caminho-clauderules" data-target="d2-5-regras-por-caminho-clauderules">5. Regras por caminho: `.claude/rules/`</a><a class="sub-item" href="#d2-6-preferencias-pessoais-nao-vao-para-o-repo" data-target="d2-6-preferencias-pessoais-nao-vao-para-o-repo">6. Preferências pessoais não vão para o repo</a><a class="sub-item" href="#d2-7-exercicio-01" data-target="d2-7-exercicio-01">7. Exercício 01</a><a class="sub-item" href="#d2-8-armadilhas" data-target="d2-8-armadilhas">8. Armadilhas</a><a class="sub-item" href="#d2-9-checklist" data-target="d2-9-checklist">9. Checklist</a><div class="group">02 — Skills</div><a class="" href="#d3-modulo-02-skills-procedimentos-que-carregam-so-quando-precisam" data-target="d3-modulo-02-skills-procedimentos-que-carregam-so-quando-precisam">Módulo 02 — Skills: procedimentos que carregam só quando precisam</a><a class="sub-item" href="#d3-1-o-que-uma-skill-e-e-o-que-nao-e" data-target="d3-1-o-que-uma-skill-e-e-o-que-nao-e">1. O que uma skill é (e o que não é)</a><a class="sub-item" href="#d3-2-skillmd-minima" data-target="d3-2-skillmd-minima">2. `SKILL.md` mínima</a><a class="sub-item" href="#d3-3-as-tres-skills-que-voce-deve-construir-primeiro" data-target="d3-3-as-tres-skills-que-voce-deve-construir-primeiro">3. As três skills que você deve construir primeiro</a><a class="sub-item" href="#d3-4-chamando-e-inspecionando" data-target="d3-4-chamando-e-inspecionando">4. Chamando e inspecionando</a><a class="sub-item" href="#d3-5-exercicio-02-criar-a-skill-de-testes" data-target="d3-5-exercicio-02-criar-a-skill-de-testes">5. Exercício 02 — criar a skill de testes</a><a class="sub-item" href="#d3-6-erros-comuns" data-target="d3-6-erros-comuns">6. Erros comuns</a><a class="sub-item" href="#d3-7-checklist" data-target="d3-7-checklist">7. Checklist</a><div class="group">03 — Economia, acurácia e segurança</div><a class="" href="#d4-modulo-03-menos-tokens-mais-acerto-menos-risco" data-target="d4-modulo-03-menos-tokens-mais-acerto-menos-risco">Módulo 03 — Menos tokens, mais acerto, menos risco</a><a class="sub-item" href="#d4-1-deterministico-vs-nao-deterministico" data-target="d4-1-deterministico-vs-nao-deterministico">1. Determinístico vs não determinístico</a><a class="sub-item" href="#d4-2-menos-tokens" data-target="d4-2-menos-tokens">2. Menos tokens</a><a class="sub-item" href="#d4-3-mais-acuracia" data-target="d4-3-mais-acuracia">3. Mais acurácia</a><a class="sub-item" href="#d4-4-menos-risco" data-target="d4-4-menos-risco">4. Menos risco</a><a class="sub-item" href="#d4-5-exercicio-03-tres-entregas" data-target="d4-5-exercicio-03-tres-entregas">5. Exercício 03 ( três entregas )</a><a class="sub-item" href="#d4-6-checklist" data-target="d4-6-checklist">6. Checklist</a><div class="group">04 — Subagents, hooks e MCP</div><a class="" href="#d5-modulo-04-subagents-hooks-e-integracao-mcp-vs-cli" data-target="d5-modulo-04-subagents-hooks-e-integracao-mcp-vs-cli">Módulo 04 — Subagents, hooks e integração (MCP vs CLI)</a><a class="sub-item" href="#d5-1-subagents-paralelismo-e-olhar-independente" data-target="d5-1-subagents-paralelismo-e-olhar-independente">1. Subagents: paralelismo e olhar independente</a><a class="sub-item" href="#d5-2-hooks-pontos-do-loop" data-target="d5-2-hooks-pontos-do-loop">2. Hooks: pontos do loop</a><a class="sub-item" href="#d5-3-mcp-vs-cli-a-decisao-certa-para-gitlab" data-target="d5-3-mcp-vs-cli-a-decisao-certa-para-gitlab">3. MCP vs CLI: a decisão certa para GitLab</a><a class="sub-item" href="#d5-4-worktrees-e-paralelismo-seguro" data-target="d5-4-worktrees-e-paralelismo-seguro">4. Worktrees e paralelismo seguro</a><a class="sub-item" href="#d5-5-tarefas-agendadas" data-target="d5-5-tarefas-agendadas">5. Tarefas agendadas</a><a class="sub-item" href="#d5-6-exercicio-04" data-target="d5-6-exercicio-04">6. Exercício 04</a><a class="sub-item" href="#d5-7-checklist" data-target="d5-7-checklist">7. Checklist</a><div class="group">05 — TDD e testes unitários</div><a class="" href="#d6-modulo-05-tdd-e-testes-unitarios-em-c-para-stm32" data-target="d6-modulo-05-tdd-e-testes-unitarios-em-c-para-stm32">Módulo 05 — TDD e testes unitários em C para STM32</a><a class="sub-item" href="#d6-1-por-que-testar-no-host" data-target="d6-1-por-que-testar-no-host">1. Por que testar no host</a><a class="sub-item" href="#d6-2-ceedling-em-10-minutos" data-target="d6-2-ceedling-em-10-minutos">2. Ceedling em 10 minutos</a><a class="sub-item" href="#d6-3-ciclo-tdd-com-o-agente" data-target="d6-3-ciclo-tdd-com-o-agente">3. Ciclo TDD com o agente</a><a class="sub-item" href="#d6-4-casos-de-borda-que-o-modelo-esquece" data-target="d6-4-casos-de-borda-que-o-modelo-esquece">4. Casos de borda que o modelo esquece</a><a class="sub-item" href="#d6-5-mock-de-hal-sem-perder-a-sanidade" data-target="d6-5-mock-de-hal-sem-perder-a-sanidade">5. Mock de HAL sem perder a sanidade</a><a class="sub-item" href="#d6-6-cobertura-com-proposito" data-target="d6-6-cobertura-com-proposito">6. Cobertura com propósito</a><a class="sub-item" href="#d6-7-exercicio-05" data-target="d6-7-exercicio-05">7. Exercício 05</a><a class="sub-item" href="#d6-8-checklist" data-target="d6-8-checklist">8. Checklist</a><div class="group">06 — CI/CD no GitLab</div><a class="" href="#d7-modulo-06-cicd-no-gitlab-do-commit-ao-binario-com-evidencia" data-target="d7-modulo-06-cicd-no-gitlab-do-commit-ao-binario-com-evidencia">Módulo 06 — CI/CD no GitLab: do commit ao binário com evidência</a><a class="sub-item" href="#d7-1-o-desenho-correto-para-firmware" data-target="d7-1-o-desenho-correto-para-firmware">1. O desenho correto para firmware</a><a class="sub-item" href="#d7-2-gitlab-ciyml-funcional" data-target="d7-2-gitlab-ciyml-funcional">2. `.gitlab-ci.yml` funcional</a><a class="sub-item" href="#d7-3-regras-que-reduzem-custo-sem-perder-sinal" data-target="d7-3-regras-que-reduzem-custo-sem-perder-sinal">3. Regras que reduzem custo sem perder sinal</a><a class="sub-item" href="#d7-4-revisao-e-triagem-com-claude-no-gitlab-ci" data-target="d7-4-revisao-e-triagem-com-claude-no-gitlab-ci">4. Revisão e triagem com Claude no GitLab CI</a><a class="sub-item" href="#d7-5-scheduled-tasks-hil-noturno" data-target="d7-5-scheduled-tasks-hil-noturno">5. Scheduled tasks: HIL noturno</a><a class="sub-item" href="#d7-6-exercicio-06" data-target="d7-6-exercicio-06">6. Exercício 06</a><a class="sub-item" href="#d7-7-erros-comuns" data-target="d7-7-erros-comuns">7. Erros comuns</a><a class="sub-item" href="#d7-8-checklist" data-target="d7-8-checklist">8. Checklist</a><div class="group">07 — HIL e bancada</div><a class="" href="#d8-modulo-07-hil-fechando-o-loop-entre-o-agente-e-o-hardware" data-target="d8-modulo-07-hil-fechando-o-loop-entre-o-agente-e-o-hardware">Módulo 07 — HIL: fechando o loop entre o agente e o hardware</a><a class="sub-item" href="#d8-1-o-problema-estrutural" data-target="d8-1-o-problema-estrutural">1. O problema estrutural</a><a class="sub-item" href="#d8-2-as-quatro-camadas-do-harness" data-target="d8-2-as-quatro-camadas-do-harness">2. As quatro camadas do harness</a><a class="sub-item" href="#d8-3-test-farm-com-gitlab-runner" data-target="d8-3-test-farm-com-gitlab-runner">3. Test farm com GitLab Runner</a><a class="sub-item" href="#d8-4-exemplo-de-teste-hil-em-pytest" data-target="d8-4-exemplo-de-teste-hil-em-pytest">4. Exemplo de teste HIL em pytest</a><a class="sub-item" href="#d8-5-o-que-o-agente-deve-receber-de-volta" data-target="d8-5-o-que-o-agente-deve-receber-de-volta">5. O que o agente deve receber de volta</a><a class="sub-item" href="#d8-6-fault-injection-que-vale-a-pena" data-target="d8-6-fault-injection-que-vale-a-pena">6. Fault injection que vale a pena</a><a class="sub-item" href="#d8-7-exercicio-07" data-target="d8-7-exercicio-07">7. Exercício 07</a><a class="sub-item" href="#d8-8-checklist" data-target="d8-8-checklist">8. Checklist</a><div class="group">08 — Rastreabilidade</div><a class="" href="#d9-modulo-08-rastreabilidade-do-requisito-ao-artefato" data-target="d9-modulo-08-rastreabilidade-do-requisito-ao-artefato">Módulo 08 — Rastreabilidade: do requisito ao artefato</a><a class="sub-item" href="#d9-1-rastreabilidade-e-cadeia-nao-documento" data-target="d9-1-rastreabilidade-e-cadeia-nao-documento">1. Rastreabilidade é cadeia, não documento</a><a class="sub-item" href="#d9-2-gitlab-issues-como-ancora" data-target="d9-2-gitlab-issues-como-ancora">2. GitLab Issues como âncora</a><a class="sub-item" href="#d9-3-convencao-de-commit" data-target="d9-3-convencao-de-commit">3. Convenção de commit</a><a class="sub-item" href="#d9-4-validador-deterministico" data-target="d9-4-validador-deterministico">4. Validador determinístico</a><a class="sub-item" href="#d9-5-adr-com-secao-compliance" data-target="d9-5-adr-com-secao-compliance">5. ADR com seção `Compliance`</a><a class="sub-item" href="#d9-6-skill-user-stories-como-gerador-de-rastreabilidade" data-target="d9-6-skill-user-stories-como-gerador-de-rastreabilidade">6. Skill `/user-stories` como gerador de rastreabilidade</a><a class="sub-item" href="#d9-7-exercicio-08" data-target="d9-7-exercicio-08">7. Exercício 08</a><a class="sub-item" href="#d9-8-checklist" data-target="d9-8-checklist">8. Checklist</a><div class="group">09 — Releases</div><a class="" href="#d10-modulo-09-releases-e-governanca-leve" data-target="d10-modulo-09-releases-e-governanca-leve">Módulo 09 — Releases e governança leve</a><a class="sub-item" href="#d10-1-release-e-um-contrato-nao-um-zip" data-target="d10-1-release-e-um-contrato-nao-um-zip">1. Release é um contrato, não um zip</a><a class="sub-item" href="#d10-2-versionamento-com-chave-de-hardware" data-target="d10-2-versionamento-com-chave-de-hardware">2. Versionamento com chave de hardware</a><a class="sub-item" href="#d10-3-changelog-a-partir-de-mrs" data-target="d10-3-changelog-a-partir-de-mrs">3. Changelog a partir de MRs</a><a class="sub-item" href="#d10-4-runbook-de-verificacao" data-target="d10-4-runbook-de-verificacao">4. Runbook de verificação</a><a class="sub-item" href="#d10-5-revisao-final-antes-de-taguear" data-target="d10-5-revisao-final-antes-de-taguear">5. Revisão final antes de taguear</a><a class="sub-item" href="#d10-6-governanca-corporativa-referencia-rapida" data-target="d10-6-governanca-corporativa-referencia-rapida">6. Governança corporativa (referência rápida)</a><a class="sub-item" href="#d10-7-exercicio-09" data-target="d10-7-exercicio-09">7. Exercício 09</a><a class="sub-item" href="#d10-8-checklist" data-target="d10-8-checklist">8. Checklist</a><div class="group">10 — Capstone</div><a class="" href="#d11-modulo-10-capstone-montando-o-sistema-completo" data-target="d11-modulo-10-capstone-montando-o-sistema-completo">Módulo 10 — Capstone: montando o sistema completo</a><a class="sub-item" href="#d11-1-objetivo" data-target="d11-1-objetivo">1. Objetivo</a><a class="sub-item" href="#d11-2-sequencia-de-execucao-guiada" data-target="d11-2-sequencia-de-execucao-guiada">2. Sequência de execução guiada</a><a class="sub-item" href="#d11-3-matriz-de-cobertura-do-capstone" data-target="d11-3-matriz-de-cobertura-do-capstone">3. Matriz de cobertura do capstone</a><a class="sub-item" href="#d11-4-auditoria-final-o-que-um-revisor-deve-perguntar" data-target="d11-4-auditoria-final-o-que-um-revisor-deve-perguntar">4. Auditoria final (o que um revisor deve perguntar)</a><a class="sub-item" href="#d11-5-extensoes-opcionais" data-target="d11-5-extensoes-opcionais">5. Extensões opcionais</a><a class="sub-item" href="#d11-6-entregaveis-para-o-workshop" data-target="d11-6-entregaveis-para-o-workshop">6. Entregáveis para o workshop</a><a class="sub-item" href="#d11-7-checklist-final" data-target="d11-7-checklist-final">7. Checklist final</a><div class="group">Apêndice — GitLab vs GitHub</div><a class="" href="#d12-apendice-gitlab-vs-github-actions-e-referencia-rapida" data-target="d12-apendice-gitlab-vs-github-actions-e-referencia-rapida">Apêndice — GitLab vs GitHub Actions (e referência rápida)</a><a class="sub-item" href="#d12-1-comparacao-curta" data-target="d12-1-comparacao-curta">1. Comparação curta</a><a class="sub-item" href="#d12-2-equivalencias-de-comando" data-target="d12-2-equivalencias-de-comando">2. Equivalências de comando</a><a class="sub-item" href="#d12-3-sobre-code-review-local" data-target="d12-3-sobre-code-review-local">3. Sobre `/code-review` local</a><a class="sub-item" href="#d12-4-referencia-rapida-de-comandos-do-material" data-target="d12-4-referencia-rapida-de-comandos-do-material">4. Referência rápida de comandos do material</a><a class="sub-item" href="#d12-5-glossario" data-target="d12-5-glossario">5. Glossário</a><a class="sub-item" href="#d12-6-leitura-adicional" data-target="d12-6-leitura-adicional">6. Leitura adicional</a><div class="group">Referências</div><a class="" href="#d13-referencias-consolidadas" data-target="d13-referencias-consolidadas">Referências consolidadas</a><a class="sub-item" href="#d13-1-anthropic-claude-code-fonte-primaria" data-target="d13-1-anthropic-claude-code-fonte-primaria">1. Anthropic / Claude Code — fonte primária</a><a class="sub-item" href="#d13-2-ia-aplicada-a-firmware-stm32" data-target="d13-2-ia-aplicada-a-firmware-stm32">2. IA aplicada a firmware / STM32</a><a class="sub-item" href="#d13-3-gitlab-embedded-hil" data-target="d13-3-gitlab-embedded-hil">3. GitLab + embedded / HIL</a><a class="sub-item" href="#d13-4-stm32-gitlab-ci-na-pratica" data-target="d13-4-stm32-gitlab-ci-na-pratica">4. STM32 + GitLab CI na prática</a><a class="sub-item" href="#d13-5-loop-fechado-ia-escreve-testa-no-hardware-corrige" data-target="d13-5-loop-fechado-ia-escreve-testa-no-hardware-corrige">5. Loop fechado: IA escreve → testa no hardware → corrige</a><a class="sub-item" href="#d13-6-base-tdd-testes-em-c" data-target="d13-6-base-tdd-testes-em-c">6. Base TDD / testes em C</a><a class="sub-item" href="#d13-7-como-manter-esta-lista-viva" data-target="d13-7-como-manter-esta-lista-viva">7. Como manter esta lista viva</a></nav></aside><main><section class="doc" id="doc-0"><h1 id="d0-workshop-claude-code-para-firmware-stm32-com-gitlab">Workshop — Claude Code para Firmware STM32 com GitLab</h1>
+<p>Material de estudo em português, mão na massa, para ensinar desenvolvedores a usar Claude Code <strong>em um projeto real de firmware STM32 versionado no GitLab</strong>: TDD, testes unitários, HIL, CI/CD, releases e rastreabilidade — com atenção explícita a custo de tokens, acurácia e segurança.</p>
+<p>Este arquivo convive com o <a href="readme.md"><code>readme.md</code></a> original (arquitetura de firmware STM32). Ele é o índice do <strong>novo</strong> material.</p>
+<hr>
+<h2 id="d0-1-para-quem-e">1. Para quem é</h2>
+<ul>
+<li>Desenvolvedor individual ou pequeno time que escreve firmware em C/C++ para STM32.</li>
+<li>Projeto versionado no <strong>GitLab</strong> (com MRs, Issues e Runners).</li>
+<li>Quer sair de "IA que autocompleta código" para "agente que obedece regras, roda testes e deixa rastro".</li>
+<li>Não é material de administração corporativa: MDM, managed settings e compliance frameworks aparecem só como referência rápida.</li>
+</ul>
+<h2 id="d0-2-pre-requisitos">2. Pré-requisitos</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash"># 1. Claude Code instalado (instalação nativa)
+curl -fsSL https://claude.ai/install.sh | bash
+claude --version
+
+# 2. Ferramentas do dia a dia
+sudo apt-get install -y bubblewrap socat git make cmake python3 pipx
+pipx install ceedling          # Unity + CMock + CException
+pipx install glab              # CLI do GitLab (mais barata em contexto que MCP)
+
+# 3. Autenticação
+glab auth login
+claude /login
+
+# 4. Confira o sandbox no Linux
+claude
+&gt; /sandbox</code></pre></div>
+<p>Placa recomendada para os exercícios: STM32F103 (blue-pill) ou qualquer STM32 com ST-Link. Se não houver hardware, o Módulo 05 roda 100% no host e o Módulo 07 pode ser acompanhado com o harness simulado.</p>
+<h2 id="d0-3-arvore-do-material">3. Árvore do material</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">study/
+├── readme.md                       # guia original de arquitetura STM32 (preservado)
+├── README-claude-code.md           # este arquivo
+├── referencias.md                  # fontes consolidadas (docs, artigos, vídeos)
+├── build-livro.py                  # gera livro/index.html a partir dos módulos
+├── livro/index.html                # livro single-file, offline, imprimível
+├── modulos/00 … 10 + apêndice      # fonte canônica do conteúdo
+├── capstone/                       # config funcional para copiar ao projeto GitLab
+├── workshop/plano-de-aula.md       # aula de 90 minutos
+├── workshop/slides.html            # slides single-file
+└── video/                          # roteiro, storyboard e prompts de geração</code></pre></div>
+<h2 id="d0-4-ordem-de-leitura">4. Ordem de leitura</h2>
+<table><thead><tr>
+<th>Etapa</th>
+<th>Arquivo</th>
+<th>Tempo</th>
+</tr></thead><tbody>
+<tr>
+<td>1</td>
+<td><a href="referencias.md"><code>referencias.md</code></a></td>
+<td>15 min</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Módulos 00 → 02</td>
+<td>45 min</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Módulo 03</strong> (economia, acurácia, segurança)</td>
+<td>30 min</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Módulos 04 → 07</td>
+<td>90 min</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Módulos 08 → 10 + apêndice</td>
+<td>45 min</td>
+</tr>
+<tr>
+<td>6</td>
+<td><a href="workshop/plano-de-aula.md"><code>workshop/plano-de-aula.md</code></a></td>
+<td>90 min de aula</td>
+</tr>
+<tr>
+<td>7</td>
+<td><a href="video/roteiro.md"><code>video/roteiro.md</code></a></td>
+<td>assistir/gravar</td>
+</tr>
+</tbody></table>
+<h2 id="d0-5-gerar-o-livro-html">5. Gerar o livro HTML</h2>
+<p>Os <code>.md</code> em <code>modulos/</code> são a <strong>fonte única</strong>. O HTML é gerado:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">cd /workspace/projetos/study
+python3 build-livro.py
+# saída: livro/index.html</code></pre></div>
+<p>Abra <code>livro/index.html</code> no navegador. Não há CDN: funciona offline. Use <code>Ctrl+P</code> para salvar em PDF (cada módulo começa em uma página nova).</p>
+<h2 id="d0-6-ministrar-o-workshop">6. Ministrar o workshop</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash"># slides com navegação por ←/→ e tecla P para imprimir
+xdg-open workshop/slides.html</code></pre></div>
+<p>O plano de aula traz cronograma, exercícios, gabarito comentado e rubrica de avaliação.</p>
+<h2 id="d0-7-gerar-a-video-aula">7. Gerar a vídeo-aula</h2>
+<p>Dois caminhos, complementares:</p>
+<ol>
+<li><strong>NotebookLM</strong> — resumo de 5–8 min. Siga <a href="video/prompt-notebooklm.md"><code>video/prompt-notebooklm.md</code></a>: suba <code>referencias.md</code>, este README, <code>modulos/*.md</code> e <code>workshop/plano-de-aula.md</code>, cole o prompt em pt-BR. Revise os comandos antes de publicar.</li>
+<li><strong>Claude Code</strong> — aula completa de ~20–25 min. Siga <a href="video/roteiro.md"><code>video/roteiro.md</code></a>, <a href="video/storyboard.md"><code>video/storyboard.md</code></a> e <a href="video/prompt-claude-code.md"><code>video/prompt-claude-code.md</code></a>. O <code>render.sh</code> só deve ser executado depois que as dependências (<code>ffmpeg</code>, TTS) forem confirmadas.</li>
+</ol>
+<h2 id="d0-8-principios-que-atravessam-todo-o-material">8. Princípios que atravessam todo o material</h2>
+<ol>
+<li><strong>O que não pode ter exceção vira hook, deny rule ou managed setting — nunca só texto.</strong></li>
+<li><strong>Claude recebe o que não consegue ver</strong>: restrições de RAM/Flash, erros de silício, processo de release, decisões de ADR.</li>
+<li><strong>Contexto é dinheiro e atenção</strong>: <code>/clear</code> entre tarefas, skills para procedimentos longos, <code>CLAUDE.md</code> com menos de 200 linhas.</li>
+<li><strong>Verificação antes de "pronunciar done"</strong>: comando de teste, exit code, fixture ou revisor independente.</li>
+<li><strong>Rastreabilidade é cadeia, não documento</strong>: <code>REQ → Issue → commit → MR → pipeline → release</code>.</li>
+</ol>
+<h2 id="d0-9-avisos">9. Avisos</h2>
+<ul>
+<li>Material pesquisado em <strong>24/11/2026</strong>. A documentação muda rápido; confirme versões com <code>claude --version</code> e <a href="<a href="https://code.claude.com/docs/llms.txt"><code>llms.txt</code>">https://code.claude.com/docs/llms.txt"><code>llms.txt</code></a></a>.</li>
+<li>Recursos citados como disponíveis em certos planos/versões estão marcados no texto. Não presuma Claude Ship, Agent Teams ou scheduled tasks habilitados sem checar.</li>
+<li>Nenhum projeto original foi modificado na produção deste material. O capstone é um esqueleto novo, pronto para ser copiado.</li>
+</ul></section><section class="doc" id="doc-1"><h1 id="d1-modulo-00-por-que-firmware-e-diferente-e-por-que-isso-muda-o-uso-da-ia">Módulo 00 — Por que firmware é diferente (e por que isso muda o uso da IA)</h1>
+<p><strong>Tempo:</strong> 25 min · <strong>Entrega:</strong> mental model das 6 camadas + <code>claude</code> funcionando no seu projeto.</p>
+<hr>
+<h2 id="d1-1-o-problema-que-este-workshop-resolve">1. O problema que este workshop resolve</h2>
+<p>Quase todo tutorial de IA para código follow along com uma API REST: roda teste em 2 segundos, vê erro, corrige, pronto. Firmware não é assim:</p>
+<table><thead><tr>
+<th>Característica</th>
+<th>Consequência para o agente</th>
+</tr></thead><tbody>
+<tr>
+<td>RAM/Flash contadas em bytes</td>
+<td>"Funciona no meu host" não significa nada. O agente precisa saber o orçamento.</td>
+</tr>
+<tr>
+<td>Hardware fora do processo</td>
+<td>Compilar não prova que o pino 5 do GPIO está certo. Falta o loop HIL.</td>
+</tr>
+<tr>
+<td>Erra de silício / errata</td>
+<td>O modelo não vê o datasheet revisão C. Tem que entrar no contexto.</td>
+</tr>
+<tr>
+<td>Feedback lento (flash, reset, serial)</td>
+<td>Cada iteração custa tempo e desgaste da bancada. Retrabalho é caro.</td>
+</tr>
+<tr>
+<td>Concorrência e ISR</td>
+<td>Bug depende de timing; teste determinístico precisa de mock e disciplina.</td>
+</tr>
+<tr>
+<td>Release é binário com versão</td>
+<td>Rastrear <code>v1.4.2</code> até o requisito é parte do produto, não burocracia.</td>
+</tr>
+</tbody></table>
+<blockquote><p>Frase para guardar: <strong>a IA não é o problema; o problema é ela decidir com informação incompleta e ninguém ter um cheque determinístico para barrar.</strong></p></blockquote>
+<h2 id="d1-2-o-mapa-de-6-camadas">2. O mapa de 6 camadas</h2>
+<p>Todo o resto do workshop é uma das camadas abaixo:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">1. CONTEXTO      CLAUDE.md, SPEC.md, @arquivo, regras por caminho
+2. SKILLS        procedimentos carregados só quando chamados
+3. ISOLAMENTO    subagents, worktrees, permissões, sandbox
+4. HOOKS         regras que o harness executa (não o modelo)
+5. INTEGRAÇÃO    MCP/CLI, GitLab Issues e MRs, plugins
+6. ORQUESTRAÇÃO  GitLab CI, scheduled tasks, Agent SDK (opcional)</code></pre></div>
+<p>Camadas 1–2 aumentam <strong>acertividade</strong>. Camadas 3–4 aumentam <strong>segurança e previsibilidade</strong>. Camadas 5–6 fecham o <strong>ciclo de evidência</strong>.</p>
+<h2 id="d1-3-superficies-uma-config-varios-lugares">3. Superfícies: uma config, vários lugares</h2>
+<p>Claude Code roda em terminal, VS Code, JetBrains, Desktop e Web. <strong>O motor é o mesmo</strong>: <code>CLAUDE.md</code>, <code>.claude/settings.json</code>, skills e MCP valem em todos. Não estude "Claude Code da IDE" separado do da CLI.</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash"># instalação nativa (Linux/macOS/WSL)
+curl -fsSL https://claude.ai/install.sh | bash
+claude --version
+
+# primeiro contato
+claude
+&gt; /quickstart
+&gt; /model
+&gt; /doctor</code></pre></div>
+<p>Se o projeto usar <code>AGENTS.md</code> em vez de <code>CLAUDE.md</code>, ele é suportado. Ter os dois é redundante, não errado — veja o Módulo 01.</p>
+<h2 id="d1-4-exercicio-00-explorar-sem-editar">4. Exercício 00 — explorar sem editar</h2>
+<p>No diretório do seu projeto GitLab (ou no <code>capstone/</code> deste material):</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">Você é um novo dev no projeto. Sem modificar nenhum arquivo:
+1. descubra como o firmware é compilado e gravado;
+2. aponte onde ficam as regras de negócio versus os drivers;
+3. diga qual comando você usaria para rodar só os testes unitários;
+4. liste três coisas que você NÃO consegue saber lendo o código.</code></pre></div>
+<p>Por que "sem modificar"? Porque o objetivo do primeiro contato é medir <strong>o que o agente consegue inferir</strong>. A diferença entre o que ele inferiu e o que você sabia é exatamente o conteúdo do <code>CLAUDE.md</code> que você vai escrever no Módulo 01.</p>
+<p>Saia com <code>Esc</code>. Se quiser desfazer algo: <code>/rewind</code>.</p>
+<h2 id="d1-5-erros-comuns-de-quem-vem-de-github-copilot">5. Erros comuns de quem vem de GitHub Copilot</h2>
+<ul>
+<li><strong>Prompt vago:</strong> "melhore esse firmware". Sem alvo de verificação, o agente escolhe o próprio critério de pronto.</li>
+<li><strong>Pedir para "testar no hardware" sem dizer qual hardware.</strong> Ele não tem ST-Link; ele tem permissão para chamar <code>st-flash</code> se você deixar.</li>
+<li><strong>Colar o datasheet inteiro no prompt.</strong> Contexto é recurso finito: use <code>@arquivo</code> e trechos, não o PDF completo.</li>
+<li><strong>Confiar que "a IDE avisou".</strong> O agente na CLI não vê o mesmo estado do editor a menos que você dê o erro.</li>
+<li><strong>Achar que permissão é segurança.</strong> Auto mode usa um classificador; regra dura é hook/deny. Ver Módulo 03.</li>
+</ul>
+<h2 id="d1-6-checklist-de-conclusao">6. Checklist de conclusão</h2>
+<ul>
+<li>□ <code>claude --version</code> executa.</li>
+<li>□ Entendeu para que serve cada uma das 6 camadas.</li>
+<li>□ Rodou o Exercício 00 sem editar arquivos.</li>
+<li>□ Anotou pelo menos 3 fatos que o agente não conseguiu descobrir sozinho.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="01-contexto.md">Módulo 01 — Contexto que não cabe no código</a>.</p></section><section class="doc" id="doc-2"><h1 id="d2-modulo-01-contexto-que-nao-cabe-no-codigo">Módulo 01 — Contexto que não cabe no código</h1>
+<p><strong>Tempo:</strong> 30 min · <strong>Entrega:</strong> um <code>CLAUDE.md</code> curto e verificável.</p>
+<hr>
+<h2 id="d2-1-a-regra-de-ouro">1. A regra de ouro</h2>
+<blockquote><p>Escreva no <code>CLAUDE.md</code> <strong>somente o que o modelo não consegue descobrir lendo o repo</strong>.</p></blockquote>
+<p>Se o arquivo repete o que já está no <code>CMakeLists.txt</code>, ele só custa tokens e atenção em toda requisição. A documentação oficial recomenda <strong>menos de 200 linhas</strong> e sugere <code>/init</code> como ponto de partida — o trabalho é quase sempre <strong>remover</strong> linhas.</p>
+<h2 id="d2-2-estrutura-que-funciona-para-firmware">2. Estrutura que funciona para firmware</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown"># Commands
+- Build:      cmake --build build -j
+- Unit tests: ceedling test:all
+- One test:   ceedling test:test_blink
+- Flash:      st-flash --reset write build/firmware.bin 0x8000000
+
+# Conventions
+- Regras de negócio ficam em app/; nunca em Drivers/
+- HAL gerada pelo CubeMX é somente leitura: nunca editar Drivers/STM32F1xx_HAL_Driver/
+- Sem malloc/printf em código de produção; use osal_log()
+
+# Gotchas
+- Rev C do ADC exige 1µs extra após CS (ERRATA-042), ver docs/errata.md
+- O timer de 32-bit vira em 49,7 dias; sempre compare com Δ, nunca com absoluto
+- O job de I2C na bancada não pode rodar em paralelo (ver .gitlab-ci.yml)
+
+# Verification
+- Antes de dizer &quot;pronto&quot;: ceedling test:all &amp;&amp; ./scripts/shellcheck.sh</code></pre></div>
+<p>Quatro seções, ~20 linhas. É o suficiente para mudar o comportamento do agente.</p>
+<p>Compare com o que a Beningo usa no artigo sobre Claude Code para firmware: orçamento de RAM/Flash, imagem STM32L476RG, escolha RTOS vs bare-metal, proibição de <code>malloc</code>/<code>printf</code>, referência à errata do I2C. Tudo aquilo é <strong>informação ausente do código</strong>.</p>
+<h2 id="d2-3-alimente-o-contexto-no-prompt-nao-so-no-arquivo">3. Alimente o contexto no prompt, não só no arquivo</h2>
+<table><thead><tr>
+<th>O que você tem</th>
+<th>Como passar</th>
+</tr></thead><tbody>
+<tr>
+<td>Um arquivo específico</td>
+<td><code>@path/para/arquivo.c</code> (cole o conteúdo efetivo na conversa)</td>
+</tr>
+<tr>
+<td>Uma captura de tela do oscilloscope / erro do CubeIDE</td>
+<td>cole a imagem</td>
+</tr>
+<tr>
+<td>Saída de comando longa</td>
+<td>`cat build.log \</td>
+<td>claude -p "explique a primeira falha real"`</td>
+</tr>
+<tr>
+<td>Uma decisão tomada em reunião</td>
+<td>escreva em <code>docs/decisions/NNN-titulo.md</code> e referencie no prompt</td>
+</tr>
+</tbody></table>
+<p>Prompt específico economiza rodadas. <code>"o ADC lê 0xFF no canal 2, mas o canal 1 está OK; aqui está o analisador lógico"</code> é melhor que <code>"o ADC está ruim"</code>.</p>
+<h2 id="d2-4-specmd-antes-de-implementar">4. <code>SPEC.md</code> antes de implementar</h2>
+<p>O fluxo que mais reduz retrabalho:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">sessão A (brainstorm)  →  SPEC.md escrita
+        ↓
+sessão B (limpa)       →  implementação a partir da spec
+        ↓
+sessão C (revisor)     →  subagent compara diff contra SPEC.md</code></pre></div>
+<p>A doc de best practices recomenda explicitamente: depois que a spec existe, <strong>abra uma sessão nova</strong> para construir. O sessão A já está contaminada pelas tentativas de interpretação; a B começa com a definição de pronto por escrito.</p>
+<p>Exemplo mínimo de <code>SPEC.md</code>:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown"># REQ-001 — Piscar LED de status
+
+Critérios de aceite:
+- [ ] LED alterna a cada 500 ms ± 10% com o sistema em IDLE
+- [ ] LED fica aceso contínuo em ERROR
+- [ ] A lógica de temporização não usa busy-wait
+- [ ] Existe teste unitário para a transição IDLE→ERROR
+
+Fora de escopo: PWM, MQTT, modos de baixo consumo.</code></pre></div>
+<h2 id="d2-5-regras-por-caminho-clauderules">5. Regras por caminho: <code>.claude/rules/</code></h2>
+<p>Quando a regra só vale em parte do repo, não polua o <code>CLAUDE.md</code>:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">&lt;!-- .claude/rules/generated.md --&gt;
+---
+paths:
+  - &quot;Drivers/**&quot;
+  - &quot;Middlewares/**&quot;
+---
+
+Código gerado pelo CubeMX. Nunca editar diretamente.
+Se precisar de uma mudança, altere o .ioc e regenere.</code></pre></div>
+<p>O front matter <code>paths:</code> faz o arquivo ser carregado só quando Claude trabalha naquele trecho. É o mesmo mecanismo de progressive disclosure das skills, aplicado a regras.</p>
+<h2 id="d2-6-preferencias-pessoais-nao-vao-para-o-repo">6. Preferências pessoais não vão para o repo</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash"># suas preferências, ignoradas pelo Git
+echo &#x27;CLAUDE.local.md&#x27; &gt;&gt; .gitignore</code></pre></div>
+<p>Use <code>CLAUDE.local.md</code> para coisas como "prefira respostas curtas" ou "sempre mostre o comando antes de rodar". O que é do time fica no <code>CLAUDE.md</code>; o que é seu fica no <code>.local</code>.</p>
+<h2 id="d2-7-exercicio-01">7. Exercício 01</h2>
+<ol>
+<li>Rode <code>/init</code> no <code>capstone/</code>.</li>
+<li>Apague metade do que ele gerou.</li>
+<li>Escreva as seções Commands / Conventions / Gotchas / Verification com o que você respondeu no Exercício 00.</li>
+<li>Rode:</li>
+</ol>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">/context all
+/doctor
+/doctor prompt-audit</code></pre></div>
+<ol>
+<li>Confira: o <code>CLAUDE.md</code> tem menos de 200 linhas e nenhuma linha que o compilador já diria?</li>
+</ol>
+<h2 id="d2-8-armadilhas">8. Armadilhas</h2>
+<ul>
+<li><strong><code>IMPORTANT:</code> em caixa alta não é mecanismo de enforcement.</strong> Se a linha continua sendo ignorada, ela é regra dura → vai para hook (Módulo 03).</li>
+<li><strong><code>CLAUDE.md</code> + <code>AGENTS.md</code> duplicados.</strong> Funciona, mas sincronize. Se um diz "use Ceedling" e outro diz "use CppUTest", o <code>/doctor prompt-audit</code> ajuda a encontrar a contradição.</li>
+<li><strong>Colocar o procedimento de release inteiro no <code>CLAUDE.md</code>.</strong> Isso é skill (Módulo 02).</li>
+</ul>
+<h2 id="d2-9-checklist">9. Checklist</h2>
+<ul>
+<li>□ <code>CLAUDE.md</code> &lt; 200 linhas.</li>
+<li>□ Tem comando exato de teste e de flash.</li>
+<li>□ Tem pelo menos uma gotcha de hardware/datasheet.</li>
+<li>□ Regras de caminho estão em <code>.claude/rules/</code> com <code>paths:</code>.</li>
+<li>□ <code>SPEC.md</code> escrito antes da implementação.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="02-skills.md">Módulo 02 — Skills</a>.</p></section><section class="doc" id="doc-3"><h1 id="d3-modulo-02-skills-procedimentos-que-carregam-so-quando-precisam">Módulo 02 — Skills: procedimentos que carregam só quando precisam</h1>
+<p><strong>Tempo:</strong> 35 min · <strong>Entrega:</strong> skill <code>/embedded-unit-tests</code> funcional no <code>capstone/</code>.</p>
+<hr>
+<h2 id="d3-1-o-que-uma-skill-e-e-o-que-nao-e">1. O que uma skill é (e o que não é)</h2>
+<p>Uma skill é um pacote de instruções com nome e descrição. Claude vê <strong>nome + descrição</strong> em toda sessão; o conteúdo completo só entra em contexto quando a tarefa combina com a descrição (ou quando você chama <code>/nome</code>).</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">.claude/skills/
+└── embedded-unit-tests/
+    ├── SKILL.md              # obrigatório: nome, descrição, passos
+    └── references/
+        ├── mocking.md        # carregado só se necessário
+        └── edge-cases.md     # carregado só se necessário</code></pre></div>
+<p>Isso é <strong>progressive disclosure</strong>: o custo em contexto é quase zero até a skill ser usada. Por isso procedimento longo (release, auditoria, escrita de ADR) vai para skill, não para <code>CLAUDE.md</code>.</p>
+<table><thead><tr>
+<th>Mecanismo</th>
+<th>Quando carrega</th>
+<th>Garante?</th>
+<th>Melhor uso</th>
+</tr></thead><tbody>
+<tr>
+<td>prompt</td>
+<td>só naquele turno</td>
+<td>não</td>
+<td>pedido pontual</td>
+</tr>
+<tr>
+<td><code>CLAUDE.md</code></td>
+<td>toda sessão</td>
+<td>não</td>
+<td>restrições curtas e universais</td>
+</tr>
+<tr>
+<td><code>.claude/rules/*.md</code></td>
+<td>quando o caminho bate</td>
+<td>não</td>
+<td>regra de uma pasta</td>
+</tr>
+<tr>
+<td><strong>skill</strong></td>
+<td>quando a descrição bate / <code>/chamada</code></td>
+<td>não</td>
+<td>procedimento com etapas</td>
+</tr>
+<tr>
+<td><strong>hook / deny rule</strong></td>
+<td>sempre, pelo harness</td>
+<td><strong>sim</strong></td>
+<td>"nunca" e "sempre"</td>
+</tr>
+</tbody></table>
+<blockquote><p>Skill ainda é instrução para o modelo. É ótima para consistência, <strong>não</strong> para imposição. Imposição é Módulo 03.</p></blockquote>
+<h2 id="d3-2-skillmd-minima">2. <code>SKILL.md</code> mínima</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">---
+name: embedded-unit-tests
+description: Escreve testes unitários em C para código STM32 com Unity/CMock.
+  Use quando o usuário pedir teste, TDD, cobertura ou região crítica de firmware.
+---
+
+# Embedded unit tests
+
+1. Descubra o alvo: qual `.c`, qual função, qual efeito observável.
+2. Escreva PRIMEIRO o teste em `test/test_&lt;modulo&gt;.c`.
+3. Mock de hardware: use CMock para HAL; nunca chame `HAL_GPIO_*` no teste.
+4. Cubra os casos de borda em `references/edge-cases.md`.
+5. Rode `ceedling test:all`. Se falhar, corrija o código — nunca enfraqueça o teste.
+6. Ao final, reporte: arquivo do teste, comando rodado, resultado.
+
+## Regras
+- Teste roda no host, sem placa.
+- Se o teste exigir hardware, pare e pergunte.</code></pre></div>
+<p>Nome e descrição são o que o agente usa para escolher. Descrição ruim ("ajuda com testes") faz a skill nunca ser chamada. Descrição boa lista <strong>gatilhos</strong>.</p>
+<h2 id="d3-3-as-tres-skills-que-voce-deve-construir-primeiro">3. As três skills que você deve construir primeiro</h2>
+<p>Baseado no guia prático da Beningo para desenvolvedores embarcados:</p>
+<h3 id="d3-31-user-stories">3.1 <code>/user-stories</code></h3>
+<ul>
+<li>Entrada: requisito em linguagem natural.</li>
+<li>Saída: história no formato <strong>INVEST</strong> + critérios <strong>Given-When-Then</strong>.</li>
+<li>Por que importa: se o agente não consegue transformar o requisito em critério testável, o requisito está ambíguo — e é melhor descobrir antes do que depois do flash.</li>
+<li>Require que todo critério tenha um <code>REQ-###</code> rastreável.</li>
+</ul>
+<h3 id="d3-32-embedded-unit-tests">3.2 <code>/embedded-unit-tests</code></h3>
+<ul>
+<li><code>references/mocking.md</code>: como isolar HAL, ADC, UART, timers.</li>
+<li><code>references/edge-cases.md</code>: lista viva com rollover de timer de 32 bits (49,7 dias @1 kHz), wraparound de buffer circular, reentrância de ISR, underrun de DMA, perda de IRQ, valores <code>0</code>/<code>NULL</code>/<code>UINT32_MAX</code>.</li>
+<li>Por que importa: o modelo esquece esses casos; a skill não.</li>
+</ul>
+<h3 id="d3-33-adr-architecture-decision-record">3.3 <code>/adr</code> (Architecture Decision Record)</h3>
+<ul>
+<li>Template com contexto, decisão, alternativas, consequências.</li>
+<li><strong>Seção obrigatória <code>Compliance</code></strong>: "como essa decisão será verificada automaticamente?"</li>
+<li>Por que importa: fecha o loop entre arquitetura e CI. Decisão sem verificação vira opinião.</li>
+</ul>
+<h2 id="d3-4-chamando-e-inspecionando">4. Chamando e inspecionando</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">&gt; /skills                      # lista skills disponíveis
+&gt; /embedded-unit-tests test_blink.c
+&gt; Use a skill /adr para registrar a decisão de usar OSAL</code></pre></div>
+<p>Claude pode iniciar a skill sozinho se a descrição casar com o pedido. Você também pode forçar pelo nome.</p>
+<h2 id="d3-5-exercicio-02-criar-a-skill-de-testes">5. Exercício 02 — criar a skill de testes</h2>
+<p>No <code>capstone/</code>:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">mkdir -p .claude/skills/embedded-unit-tests/references</code></pre></div>
+<ol>
+<li>Copie o <code>SKILL.md</code> acima.</li>
+<li>Crie <code>references/edge-cases.md</code> com 6 casos de borda do seu periférico favorito (timer, I2C, ADC).</li>
+<li>Crie <code>references/mocking.md</code> com o comando de mock do CMock para <code>HAL_GPIO_WritePin</code>.</li>
+<li>Teste:</li>
+</ol>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">&gt; Use a skill embedded-unit-tests para criar o teste da função blink_toggle()</code></pre></div>
+<ol>
+<li>Confira com <code>/context</code>: o conteúdo de <code>edge-cases.md</code> <strong>não</strong> deve aparecer até a skill ser usada.</li>
+</ol>
+<h2 id="d3-6-erros-comuns">6. Erros comuns</h2>
+<ul>
+<li><strong>Skill com 500 linhas e tudo dentro do <code>SKILL.md</code>.</strong> Divide em <code>references/</code>. Carregar tudo de uma vez destrói a vantagem.</li>
+<li><strong>Descrição vaga.</strong> Use verbos e gatilhos: "use quando o usuário pedir teste, TDD, cobertura...".</li>
+<li><strong>Skill usada para impor regra de segurança.</strong> Não funciona toda vez. Vai para hook.</li>
+<li><strong>Skill duplicando <code>CLAUDE.md</code>.</strong> A skill ensina *como fazer*; o <code>CLAUDE.md</code> diz *o que é verdade no projeto*.</li>
+</ul>
+<h2 id="d3-7-checklist">7. Checklist</h2>
+<ul>
+<li>□ <code>SKILL.md</code> com <code>name</code> e <code>description</code> no front matter.</li>
+<li>□ Procedimento longo dividido em <code>references/</code>.</li>
+<li>□ Pelo menos 3 skills: user stories, testes, ADR.</li>
+<li>□ A skill de ADR tem seção <code>Compliance</code>.</li>
+<li>□ Testei chamando a skill explicitamente e deixei o Claude escolher sozinho.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="03-economia-acuracia-seguranca.md">Módulo 03 — Economia, acurácia e segurança</a>.</p></section><section class="doc" id="doc-4"><h1 id="d4-modulo-03-menos-tokens-mais-acerto-menos-risco">Módulo 03 — Menos tokens, mais acerto, menos risco</h1>
+<p><strong>Tempo:</strong> 40 min · <strong>Entrega:</strong> <code>/usage</code> antes/depois, hook de filtro, <code>Stop</code> hook e sandbox strict.</p>
+<blockquote><p>Este é o módulo mais importante do workshop. Economia, acurácia e segurança são o mesmo mecanismo visto de três ângulos: <strong>contexto limpo → menos tokens e menos distração → mais acerto; regra determinística → menos erro e menos risco.</strong></p></blockquote>
+<hr>
+<h2 id="d4-1-deterministico-vs-nao-deterministico">1. Determinístico vs não determinístico</h2>
+<table><thead><tr>
+<th>Tipo</th>
+<th>Onde mora</th>
+<th>Quem executa</th>
+<th>Garante?</th>
+</tr></thead><tbody>
+<tr>
+<td>Não determinístico</td>
+<td>prompt, <code>CLAUDE.md</code>, skill</td>
+<td>o <strong>modelo</strong> decide</td>
+<td>não</td>
+</tr>
+<tr>
+<td>Determinístico</td>
+<td>hook, deny rule, managed setting</td>
+<td>o <strong>harness</strong> executa</td>
+<td><strong>sim</strong></td>
+</tr>
+</tbody></table>
+<p>A documentação oficial dá o diagnóstico melhor possível:</p>
+<blockquote><p>"Se você continuar reforçando uma linha do <code>CLAUDE.md</code> e Claude ainda a ignora, essa linha pertence a um hook. O inverso também vale: se você tem hooks para preferências, apague-os."</p></blockquote>
+<p>Exemplo prático em firmware:</p>
+<ul>
+<li><code>"Nunca edite Drivers/ gerado pelo CubeMX"</code> → <code>PreToolUse</code> bloqueando o caminho.</li>
+<li><code>"Sempre rode ceedling test:all antes de terminar"</code> → <code>Stop</code> hook com exit 2.</li>
+<li><code>"Prefira nomes descritivos"</code> → fica no prompt, sem hook.</li>
+</ul>
+<hr>
+<h2 id="d4-2-menos-tokens">2. Menos tokens</h2>
+<h3 id="d4-21-meca-antes-de-otimizar">2.1 Meça antes de otimizar</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">/usage</code></pre></div>
+<p>O que olhar:</p>
+<ul>
+<li><strong>Session → Usage by model</strong>: input, output, cache read/write e custo estimado por modelo.</li>
+<li><strong>Prompt cache (main)</strong>: <code>14 requests · 91% of input tokens from cache · 2 misses ... warm (1h TTL)</code>. Se o hit rate está baixo, algo está invalidando o cache.</li>
+<li><strong>Atribuição</strong>: porcentagem por <strong>skill, subagent, plugin, MCP server e <code>/loop</code></strong>. Um MCP que consome 30% aparece aqui.</li>
+<li><strong>Recomendações</strong>: linhas com share ≥10%, por exemplo <code>25% Trim ~/code/fw/CLAUDE.md · 49k tokens per request</code>.</li>
+<li><strong>Tecla <code>f</code></strong>: aplica as correções automáticas que o Claude consegue fazer (v2.1.305+).</li>
+</ul>
+<p>O número ao lado do spinner mede <strong>só o output do turno</strong> (texto + tool calls + thinking), não o input. Não confunda com o total da sessão.</p>
+<h3 id="d4-22-as-seis-acoes-de-maior-impacto">2.2 As seis ações de maior impacto</h3>
+<table><thead><tr>
+<th>Ação</th>
+<th>Comando</th>
+<th>Por quê</th>
+</tr></thead><tbody>
+<tr>
+<td>Limpar entre tarefas</td>
+<td><code>/rename</code> → <code>/clear</code> → <code>/resume</code> depois</td>
+<td><code>/clear</code> custa zero. Uma sessão com 4 tarefas reenvia as 4 em toda pergunta da 5ª.</td>
+</tr>
+<tr>
+<td>Compactar com foco</td>
+<td><code>/compact keep the firmware changes and the test commands</code></td>
+<td><code>/compact</code> é uma requisição grande; sem foco ele resume demais e você repete contexto.</td>
+</tr>
+<tr>
+<td>Descobrir o que ocupa</td>
+<td><code>/context</code>, <code>/context all</code></td>
+<td>Mostra o consumo real e confirma se o <code>CLAUDE.md</code> foi carregado.</td>
+</tr>
+<tr>
+<td>Usar CLI em vez de MCP</td>
+<td><code>glab</code>, <code>git</code>, <code>make</code>, <code>st-flash</code></td>
+<td>Definições de tools MCP entram no contexto; CLI não adiciona lista de ferramentas.</td>
+</tr>
+<tr>
+<td>Modelo certo</td>
+<td><code>/model sonnet</code>, <code>model: haiku</code> no subagent</td>
+<td>Sonnet para rotina; Opus para arquitetura; Haiku para subagent simples.</td>
+</tr>
+<tr>
+<td>Esforço certo</td>
+<td>`/effort low</td>
+<td>high</td>
+<td>xhigh</td>
+<td>max`</td>
+<td>Thinking é cobrado como output.</td>
+</tr>
+</tbody></table>
+<p>Guia de esforço:</p>
+<ul>
+<li><code>low</code> — brainstorm, rascunho, rename em poucos arquivos, você revisa cada passo.</li>
+<li><code>high</code> / <code>xhigh</code> — bug que você não escreveu, teste flaky, mudança de schema com muitos leitores.</li>
+<li><code>max</code> — problema difícil sem supervisão, ex.: caça a vulnerabilidade. Em tarefa comum ele "pensa demais" e cobra mais pelo mesmo resultado.</li>
+<li><code>ultrathink</code> — quando só a <strong>próxima</strong> mensagem precisa de profundidade.</li>
+<li><code>MAX_THINKING_TOKENS=8000</code> — para modelos com budget fixo; modelos adaptativos ignoram e usam <code>/effort</code>.</li>
+</ul>
+<h3 id="d4-23-cache-o-que-derruba-o-hit-rate">2.3 Cache: o que derruba o hit rate</h3>
+<p>Claude Code reprocessa o histórico a cada turno; o cache faz isso a preço de leitura cacheada. Em assinatura o TTL é ~1h; na API ~5min (confirme em <code>/usage</code>).</p>
+<p>Cuidado com:</p>
+<ul>
+<li>pausa longa → cache frio;</li>
+<li>troca de modelo (<code>/model</code>) → turno não cacheado;</li>
+<li><code>/compact</code> e limpeza de tool results → rebuild esperado;</li>
+<li>mudança em definições de tools (MCP ligado/desligado).</li>
+</ul>
+<h3 id="d4-24-hook-de-pre-processamento-menos-log-mais-sinal">2.4 Hook de pré-processamento: menos log, mais sinal</h3>
+<p>Em vez de deixar o Claude ler 10.000 linhas de build, filtre antes:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-json">// .claude/settings.json
+{
+  &quot;hooks&quot;: {
+    &quot;PreToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Bash&quot;,
+        &quot;hooks&quot;: [
+          { &quot;command&quot;: &quot;~/.claude/hooks/filter-test-output.sh&quot; }
+        ]
+      }
+    ]
+  }
+}</code></pre></div>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">#!/usr/bin/env bash
+# ~/.claude/hooks/filter-test-output.sh
+input=$(cat)
+cmd=$(printf &#x27;%s&#x27; &quot;$input&quot; | jq -r &#x27;.tool_input.command // &quot;&quot;&#x27;)
+
+case &quot;$cmd&quot; in
+  *ceedling*|*ctest*|*pytest*|*make\ test*)
+    filtered=&quot;${cmd% &amp;&amp; *} 2&gt;&amp;1 | tail -n 100&quot;
+    printf &#x27;{&quot;hookSpecificOutput&quot;:{&quot;hookEventName&quot;:&quot;PreToolUse&quot;,&quot;updatedInput&quot;:{&quot;command&quot;:%s}}}&#x27; \
+      &quot;$(printf &#x27;%s&#x27; &quot;$filtered&quot; | jq -Rs .)&quot;
+    ;;
+  *)
+    printf &#x27;%s&#x27; &quot;$input&quot;
+    ;;
+esac</code></pre></div>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">chmod +x ~/.claude/hooks/filter-test-output.sh</code></pre></div>
+<p>Verifique com <code>/hooks</code> e com <code>claude --debug-file ./claude-debug.txt</code> (procure por <code>modified tool input keys</code>).</p>
+<p><strong>Outras fontes de consumo silencioso:</strong> <code>/loop</code>, goals com check-in em idle, scheduled tasks, mensagens cross-session e sugestões de próximo prompt. Todos enviam o contexto cheio mesmo quando você não está digitando. Desligue o que não presta serviço.</p>
+<hr>
+<h2 id="d4-3-mais-acuracia">3. Mais acurácia</h2>
+<h3 id="d4-31-de-o-que-o-agente-nao-ve">3.1 Dê o que o agente não vê</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">@src/app/adc.c            # arquivo específico, não o repo inteiro
+[imagem do logic analyzer colada]
+cat build.log | claude -p &quot;qual é a primeira falha real?&quot;</code></pre></div>
+<h3 id="d4-32-sempre-de-um-alvo-de-verificacao">3.2 Sempre dê um alvo de verificação</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">&gt; Implemente REQ-001. Antes de terminar, rode:
+&gt;   ceedling test:all &amp;&amp; ./scripts/shellcheck.sh
+&gt; Se falhar, corrija e rode de novo. Não mude os testes.</code></pre></div>
+<p>Formas de verificar, da mais fraca para a mais forte:</p>
+<ol>
+<li>pedido no prompt;</li>
+<li><code>/goal all tests in tests/ pass and lint is clean</code> (outro modelo checa a cada turno);</li>
+<li><strong><code>Stop</code> hook</strong> (harness barra o fim do turno);</li>
+<li>revisor independente (<code>/code-review</code> local, subagent que não viu a conversa);</li>
+<li>CI no GitLab (Módulo 06).</li>
+</ol>
+<h3 id="d4-33-stop-hook-done-so-com-teste-verde">3.3 <code>Stop</code> hook: "done" só com teste verde</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-json">// .claude/settings.json
+{
+  &quot;hooks&quot;: {
+    &quot;Stop&quot;: [
+      {
+        &quot;hooks&quot;: [
+          {
+            &quot;command&quot;: &quot;ceedling test:all &gt;/dev/null 2&gt;~/.claude/stop-error.txt || { cat ~/.claude/stop-error.txt &gt;&amp;2; exit 2; }&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre></div>
+<p>Exit <code>2</code> devolve a saída para o Claude e impede o término. O que vai para <code>stderr</code> vira o motivo. Se ele bloquear 8 vezes seguidas sem tool call, o harness cede na próxima (limite configurável com <code>CLAUDE_CODE_STOP_HOOK_BLOCK_CAP</code>).</p>
+<h3 id="d4-34-revisor-que-nao-pode-editar">3.4 Revisor que não pode editar</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">&lt;!-- .claude/agents/reviewer.md --&gt;
+---
+name: reviewer
+description: Revisa um diff contra SPEC.md sem modificar arquivos.
+tools: Read, Grep, Glob
+model: sonnet
+---
+
+Leia SPEC.md e o diff. Para cada requisito, diga se há teste cobrindo.
+Ignore estilo. Reporte só problemas de correção.</code></pre></div>
+<p>A limitação de ferramentas é imposta pelo harness, não pedida em texto. É a versão barata do <code>/code-review</code>.</p>
+<h3 id="d4-35-outras-alavancas">3.5 Outras alavancas</h3>
+<ul>
+<li><code>/verify</code> — Claude builda, roda e olha o resultado (pega o que teste estático não pega).</li>
+<li><code>/rewind</code> — tente a abordagem ousada; se der errado, volta código e conversa.</li>
+<li><code>Esc</code> — corrija no meio da ação, não depois de 5 turnos.</li>
+<li>Teste incremental: um arquivo → teste → próximo.</li>
+</ul>
+<hr>
+<h2 id="d4-4-menos-risco">4. Menos risco</h2>
+<h3 id="d4-41-camadas-de-protecao">4.1 Camadas de proteção</h3>
+<ol>
+<li><strong>Permission mode</strong> — <code>auto</code> (classifier, padrão no CLI/VS Code desde v2.1.283) bloqueia <code>curl | bash</code>, deploy de produção, migrações, force push sobre trabalho de outros, envio de dados sensíveis a endpoint externo e ações aparentemente induzidas por conteúdo lido. Ainda é <strong>julgamento de modelo</strong>: pode errar.</li>
+<li><strong>Deny rules + hooks</strong> — onde mora o seu "nunca". Determinístico.</li>
+<li><strong>Sandbox do SO</strong> — limita filesystem e rede de comandos de shell e processos filhos.</li>
+</ol>
+<p><code>bypassPermissions</code> só em container descartável. <code>manual</code> é seguro, mas depois da décima confirmação você começa a aprovar sem ler.</p>
+<h3 id="d4-42-o-que-o-sandbox-cobre-e-o-que-fica-fora">4.2 O que o sandbox cobre — e o que fica FORA</h3>
+<p><strong>Dentro:</strong> Bash, PowerShell, Monitor e processos que eles iniciam.</p>
+<p><strong>Fora (importantíssimo):</strong></p>
+<ul>
+<li>tools <code>Read</code>, <code>Edit</code>, <code>Write</code>, <code>WebFetch</code>, <code>WebSearch</code> — seguem *permission rules*, não o sandbox;</li>
+<li>hooks, MCP servers locais, LSP, status line, plugins monitors, mods;</li>
+<li>comandos que <strong>você</strong> digita no prompt <code>!</code>;</li>
+<li><code>excludedCommands</code>;</li>
+<li>o retry <code>dangerouslyDisableSandbox</code>.</li>
+</ul>
+<p>Consequência prática: <code>denyRead</code> pega <code>cat .env</code>, <strong>não</strong> pega um script Python que abre <code>.env</code>. Um deny de <code>WebFetch</code> para <code>gitlab.com</code> não barra <code>curl https://gitlab.com</code> <strong>a menos que o sandbox esteja ligado</strong>.</p>
+<h3 id="d4-43-strict-sandbox-no-linux-stm32-toolchain">4.3 Strict sandbox no Linux (STM32 toolchain)</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">sudo apt-get install -y bubblewrap socat
+claude --settings &#x27;{&quot;sandbox&quot;:{&quot;enabled&quot;:true,&quot;allowUnsandboxedCommands&quot;:false,&quot;failIfUnavailable&quot;:true}}&#x27;</code></pre></div>
+<ul>
+<li><code>allowUnsandboxedCommands: false</code> — ignora o escape hatch <code>dangerouslyDisableSandbox</code>.</li>
+<li><code>failIfUnavailable: true</code> — se <code>bwrap</code>/<code>socat</code> faltarem, o Claude Code <strong>não inicia</strong>. É o comportamento correto quando sandbox é requisito.</li>
+<li>Dentro: <code>/sandbox</code> → abas *Mode*, *Overrides*, *Config*, *Dependencies*.</li>
+</ul>
+<p>Padrões de escrita: working dir + temp + <code>--add-dir</code>/<code>permissions.additionalDirectories</code>. Rede: sem rota direta, proxy com allowlist que começa <strong>vazia</strong>.</p>
+<h3 id="d4-44-credenciais-deny-e-mask">4.4 Credenciais: <code>deny</code> e <code>mask</code></h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-json">{
+  &quot;sandbox&quot;: {
+    &quot;credentials&quot;: {
+      &quot;files&quot;: [
+        { &quot;path&quot;: &quot;~/.ssh&quot;, &quot;mode&quot;: &quot;deny&quot; },
+        { &quot;path&quot;: &quot;~/.aws/credentials&quot;, &quot;mode&quot;: &quot;deny&quot; }
+      ],
+      &quot;envVars&quot;: [
+        { &quot;name&quot;: &quot;GITLAB_TOKEN&quot;, &quot;mode&quot;: &quot;mask&quot;, &quot;injectHosts&quot;: [&quot;gitlab.com&quot;] },
+        { &quot;name&quot;: &quot;NPM_TOKEN&quot;, &quot;mode&quot;: &quot;deny&quot; }
+      ]
+    },
+    &quot;network&quot;: {
+      &quot;allowedDomains&quot;: [&quot;gitlab.com&quot;],
+      &quot;tlsTerminate&quot;: true
+    }
+  }
+}</code></pre></div>
+<ul>
+<li><code>deny</code> → arquivo bloqueado, variável removida antes do comando.</li>
+<li><code>mask</code> → comando vê um *sentinel*; o proxy troca pelo valor real apenas em <code>injectHosts</code> permitidos. Exige <code>network.tlsTerminate: true</code>.</li>
+<li><code>mask</code> com injeção real só é aceito em <strong>user settings, managed settings ou <code>--settings</code></strong> — não em <code>.claude/settings.json</code> do repo.</li>
+<li>Não existe deny list padrão: se você não declarar, nada é protegido.</li>
+</ul>
+<h3 id="d4-45-hooks-que-nao-deixam-passar">4.5 Hooks que não deixam passar</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-json">{
+  &quot;hooks&quot;: {
+    &quot;PreToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Edit|Write&quot;,
+        &quot;hooks&quot;: [
+          {
+            &quot;command&quot;: &quot;./scripts/block-generated.sh&quot;,
+            &quot;onFailure&quot;: &quot;block&quot;
+          }
+        ]
+      }
+    ]
+  }
+}</code></pre></div>
+<p><code>onFailure: "block"</code> impede a ação se o scanner cair ou der timeout. Sem isso, um hook de segredos quebrado deixa o commit passar <strong>sem varredura</strong> — o que é pior do que não ter hook.</p>
+<p>Use <code>command</code>, <code>http</code> ou <code>mcp_tool</code> para imposição. Hooks do tipo <code>prompt</code> ou <code>agent</code> consultam outro modelo, logo <strong>não são determinísticos</strong>.</p>
+<h3 id="d4-46-escopo-das-configuracoes">4.6 Escopo das configurações</h3>
+<table><thead><tr>
+<th>Arquivo</th>
+<th>Quem</th>
+<th>Efeito</th>
+</tr></thead><tbody>
+<tr>
+<td><code>~/.claude/settings.json</code></td>
+<td>você</td>
+<td>global pessoal</td>
+</tr>
+<tr>
+<td><code>.claude/settings.local.json</code></td>
+<td>você, neste repo</td>
+<td>não versionado</td>
+</tr>
+<tr>
+<td><code>.claude/settings.json</code></td>
+<td>time, versionado</td>
+<td>deny vale na hora; allow depende do trust dialog</td>
+</tr>
+<tr>
+<td>managed settings</td>
+<td>admin/MDM</td>
+<td>ninguém sobrescreve — referência rápida neste workshop</td>
+</tr>
+</tbody></table>
+<p>Mantenha o conjunto imposto pequeno. Todo hook e deny rule vai disparar errado alguma vez e alguém tem que manter. 40 regras quase sempre são 37 preferências disfarçadas.</p>
+<hr>
+<h2 id="d4-5-exercicio-03-tres-entregas">5. Exercício 03 ( três entregas )</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">cd /workspace/projetos/study/capstone</code></pre></div>
+<p><strong>A. Medir</strong></p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">/usage
+&gt; anote: % de cache hit, share de MCP/subagents, maior recomendação
+/clear</code></pre></div>
+<p><strong>B. Hook de filtro</strong> — implemente o script da §2.4 e prove com <code>/hooks</code> que ele aparece em <code>PreToolUse</code>. Rode <code>ceedling test:all</code> pelo Claude e cheque no <code>--debug-file</code> que o comando foi reescrito.</p>
+<p><strong>C. Regra dura + sandbox</strong></p>
+<ol>
+<li>Crie <code>.claude/settings.json</code> com deny rule para <code>Drivers/**</code> e <code>Stop</code> hook do teste.</li>
+<li>Peça: *"edite Drivers/gpio.c para corrigir o LED"*. O bloqueio deve acontecer pelo harness.</li>
+<li>Rode o comando de strict sandbox da §4.3 e confirme em <code>/sandbox</code> que *Overrides* mostra strict.</li>
+</ol>
+<h2 id="d4-6-checklist">6. Checklist</h2>
+<ul>
+<li>□ <code>/usage</code> interpretado (cache, atribuição, recomendações).</li>
+<li>□ Usei <code>/clear</code> entre tarefas e <code>/compact</code> com foco.</li>
+<li>□ <code>CLAUDE.md</code> &lt; 200 linhas; procedimentos estão em skills.</li>
+<li>□ Hook <code>PreToolUse</code> filtrando saída de teste.</li>
+<li>□ <code>Stop</code> hook com exit 2 exigindo teste verde.</li>
+<li>□ Deny rule impõe o "nunca" (não é só texto).</li>
+<li>□ Sandbox strict ativo no Linux; credenciais declaradas.</li>
+<li>□ Sei o que fica <strong>fora</strong> do sandbox.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="04-subagents-hooks-mcp.md">Módulo 04 — Subagents, hooks e MCP/CLI</a>.</p>
+<p><strong>Fontes:</strong> <a href="<a href="https://code.claude.com/docs/en/costs.md">costs">https://code.claude.com/docs/en/costs.md">costs</a></a> · <a href="<a href="https://code.claude.com/docs/en/prompt-caching.md">prompt-caching">https://code.claude.com/docs/en/prompt-caching.md">prompt-caching</a></a> · <a href="<a href="https://code.claude.com/docs/en/best-practices.md">best-practices">https://code.claude.com/docs/en/best-practices.md">best-practices</a></a> · <a href="<a href="https://code.claude.com/docs/en/permission-modes.md">permission-modes">https://code.claude.com/docs/en/permission-modes.md">permission-modes</a></a> · <a href="<a href="https://code.claude.com/docs/en/sandboxing.md">sandboxing">https://code.claude.com/docs/en/sandboxing.md">sandboxing</a></a> · <a href="<a href="https://code.claude.com/docs/en/hooks">hooks">https://code.claude.com/docs/en/hooks">hooks</a></a>.</p></section><section class="doc" id="doc-5"><h1 id="d5-modulo-04-subagents-hooks-e-integracao-mcp-vs-cli">Módulo 04 — Subagents, hooks e integração (MCP vs CLI)</h1>
+<p><strong>Tempo:</strong> 35 min · <strong>Entrega:</strong> reviewer somente-leitura + hook de proteção + <code>glab</code> funcionando.</p>
+<hr>
+<h2 id="d5-1-subagents-paralelismo-e-olhar-independente">1. Subagents: paralelismo e olhar independente</h2>
+<p>Subagents não servem só para "proteger o contexto" — eles hoje são usados principalmente para <strong>paralelismo</strong> e <strong>independência de julgamento</strong>.</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">projeto/
+└── .claude/agents/
+    ├── reviewer.md        # Read, Grep, Glob — não edita
+    └── hil-analyst.md     # lê logs de falha da bancada</code></pre></div>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">---
+name: hil-analyst
+description: Analisa logs de testes HIL e falhas de hardware; nunca grava firmware.
+tools: Read, Grep, Glob
+model: haiku
+---
+
+Leia artifacts/hil/*.log. Agrupe falhas por causa raiz provável.
+Termine com no máximo 10 linhas e liste o REQ afetado.</code></pre></div>
+<h3 id="d5-quando-usar">Quando usar</h3>
+<table><thead><tr>
+<th>Situação</th>
+<th>Use</th>
+</tr></thead><tbody>
+<tr>
+<td>Busca ampla no repo</td>
+<td>Explore (nativo)</td>
+</tr>
+<tr>
+<td>Revisão sem viés</td>
+<td>subagent que não viu a conversa / <code>/code-review</code></td>
+</tr>
+<tr>
+<td>Log longo que não deve poluir a conversa</td>
+<td>subagent em background, pedir resumo curto</td>
+</tr>
+<tr>
+<td>Tarefa simples e repetitiva</td>
+<td><code>model: haiku</code></td>
+</tr>
+<tr>
+<td>Precisa de contexto que só a conversa tem</td>
+<td>fork da conversa atual</td>
+</tr>
+</tbody></table>
+<h3 id="d5-custo">Custo</h3>
+<p>Cada subagent faz <strong>suas próprias requisições</strong> e conta contra o mesmo limite. Um agente novo precisa coletar contexto que você já tinha — às vezes é <strong>mais lento</strong> que fazer no lugar. Por isso:</p>
+<ul>
+<li>peça resumo curto de volta;</li>
+<li>use Haiku para trabalho simples;</li>
+<li>verifique a fatia de consumo em <code>/usage</code>;</li>
+<li>desligue agentes/teammates quando terminarem.</li>
+</ul>
+<p>Agent Teams são desabilitados por padrão (<code>CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1</code>). Se ligar: Sonnet para teammates, times pequenos, prompts de spawn focados — eles carregam <code>CLAUDE.md</code>, MCP e skills automaticamente.</p>
+<h2 id="d5-2-hooks-pontos-do-loop">2. Hooks: pontos do loop</h2>
+<table><thead><tr>
+<th>Evento</th>
+<th>Uso típico em firmware</th>
+</tr></thead><tbody>
+<tr>
+<td><code>SessionStart</code></td>
+<td>checar ferramentas (<code>arm-none-eabi-gcc</code>, <code>st-flash</code>, <code>glab</code>) e avisar se faltar</td>
+</tr>
+<tr>
+<td><code>PreToolUse</code></td>
+<td>bloquear edição em <code>Drivers/**</code>; reescrever comando de teste para <code>tail -100</code></td>
+</tr>
+<tr>
+<td><code>PostToolUse</code></td>
+<td>formatar C com <code>clang-format</code> após <code>Edit</code>/<code>Write</code></td>
+</tr>
+<tr>
+<td><code>Stop</code></td>
+<td>exigir <code>ceedling test:all</code> verde antes de encerrar</td>
+</tr>
+<tr>
+<td><code>SessionEnd</code></td>
+<td>salvar resumo de contexto em <code>.docs/</code> (nunca commitado)</td>
+</tr>
+</tbody></table>
+<h3 id="d5-exemplo-formatador-deterministico">Exemplo: formatador determinístico</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-json">{
+  &quot;hooks&quot;: {
+    &quot;PostToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Edit|Write&quot;,
+        &quot;hooks&quot;: [
+          { &quot;command&quot;: &quot;clang-format -i \&quot;$FILE\&quot; 2&gt;/dev/null || true&quot; }
+        ]
+      }
+    ]
+  }
+}</code></pre></div>
+<p>Prefira um script seu a um one-liner frágil. E lembre: se a formatação é <strong>preferência</strong>, fica no prompt; se é <strong>gate</strong>, vira hook com <code>onFailure: "block"</code>.</p>
+<h3 id="d5-cuidados">Cuidados</h3>
+<ul>
+<li>Hook do tipo <code>prompt</code>/<code>agent</code> <strong>não é determinístico</strong> — usa modelo para decidir.</li>
+<li><code>workspace trust</code> decide quando hooks de um repo recém-clonado começam a rodar.</li>
+<li><code>.claude/settings.json</code> versionado afeta todo mundo que clonar. Deny rules valem imediatamente; allow rules esperam o trust dialog.</li>
+</ul>
+<h2 id="d5-3-mcp-vs-cli-a-decisao-certa-para-gitlab">3. MCP vs CLI: a decisão certa para GitLab</h2>
+<p>MCP é excelente quando você precisa de <strong>ferramentas com significado</strong> (criar issue com campos, ler MR com threading, consultar docs internas). O custo é que nome/instruções das tools entram no contexto.</p>
+<p>CLI é melhor quando o comando é simples e você quer contexto mínimo:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash"># prefira isto para operações corriqueiras
+glab issue list --label REQ-001
+glab mr create --fill --title &quot;REQ-001: piscar LED de status&quot;
+glab mr view 42
+
+# MCP só onde a riqueza de dados compensa
+/mcp</code></pre></div>
+<p>Regras práticas:</p>
+<ol>
+<li>Definições de tools MCP são <strong>deferidas por padrão</strong> — o nome entra, o schema completo entra quando usado.</li>
+<li><code>/mcp</code> mostra os servidores; desligue os que não usa.</li>
+<li><code>/usage</code> mostra o percentual atribuído a cada servidor — dado real para decidir.</li>
+<li>Em sandbox, <strong>MCP local roda fora dele</strong>. Trate servidor MCP como código confiável seu.</li>
+</ol>
+<p>Exemplo de <code>.mcp.json</code> mínimo (somente se você decidir que precisa):</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-json">{
+  &quot;mcpServers&quot;: {
+    &quot;gitlab&quot;: {
+      &quot;command&quot;: &quot;npx&quot;,
+      &quot;args&quot;: [&quot;-y&quot;, &quot;@gitlab/mcp-server&quot;],
+      &quot;env&quot;: { &quot;GITLAB_PERSONAL_ACCESS_TOKEN&quot;: &quot;$GITLAB_TOKEN&quot; }
+    }
+  }
+}</code></pre></div>
+<blockquote><p>Confira o nome do pacote e as variáveis na documentação atual do GitLab antes de usar. O ponto aqui é o *padrão*, não a flag exata.</p></blockquote>
+<h2 id="d5-4-worktrees-e-paralelismo-seguro">4. Worktrees e paralelismo seguro</h2>
+<p>Quando quiser que duas tarefas não pisotem o mesmo diretório:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">git worktree add -b feat/REQ-002 ../study-REQ-002
+cd ../study-REQ-002
+claude</code></pre></div>
+<p>Cada worktree tem seu próprio <code>CLAUDE.md</code> efetivo e seu próprio sessão. O sandbox permite escrita no <code>.git</code> compartilhado para <code>git commit</code>, mas <strong>nega</strong> <code>hooks/</code> e <code>config</code> dentro dele.</p>
+<h2 id="d5-5-tarefas-agendadas">5. Tarefas agendadas</h2>
+<p>A Overview oficial lista scheduled tasks na nuvem, no desktop e <code>/loop</code>. Aplicação natural em firmware:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">/schedule 0 3 * * * Analise os artifacts de HIL da noite, agrupe falhas por causa raiz e abra uma issue com o REQ afetado. Não grave firmware.</code></pre></div>
+<p>Cuidado: cada disparo envia o contexto da sessão. Use uma sessão dedicada, curta, com subagent Haiku e orçamento observado em <code>/usage</code>.</p>
+<h2 id="d5-6-exercicio-04">6. Exercício 04</h2>
+<ol>
+<li>Crie <code>.claude/agents/reviewer.md</code> com <code>tools: Read, Grep, Glob</code>.</li>
+<li>Peça uma mudança pequena e depois: *"use o reviewer para checar contra SPEC.md"*.</li>
+<li>Crie um <code>PreToolUse</code> que bloqueie <code>Edit|Write</code> em <code>Drivers/**</code> (use <code>exit 2</code>).</li>
+<li>Rode <code>glab issue list</code> <strong>pelo Claude</strong> e compare com a versão MCP em <code>/usage</code>.</li>
+<li>Anote qual das duas consumiu mais contexto.</li>
+</ol>
+<h2 id="d5-7-checklist">7. Checklist</h2>
+<ul>
+<li>□ Subagent reviewer não consegue editar (teste pedindo para ele editar).</li>
+<li>□ Hook <code>PostToolUse</code> ou <code>PreToolUse</code> funcionando e visível em <code>/hooks</code>.</li>
+<li>□ <code>glab</code> autenticado e usado pelo agente.</li>
+<li>□ Entendi quando MCP compensa e quando CLI é melhor.</li>
+<li>□ Nenhuma tarefa agendada rodando sem necessidade.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="05-tdd-unitario-stm32.md">Módulo 05 — TDD e testes unitários em C para STM32</a>.</p></section><section class="doc" id="doc-6"><h1 id="d6-modulo-05-tdd-e-testes-unitarios-em-c-para-stm32">Módulo 05 — TDD e testes unitários em C para STM32</h1>
+<p><strong>Tempo:</strong> 40 min · <strong>Entrega:</strong> teste vermelho→verde no host + <code>Stop</code> hook exigindo a suíte.</p>
+<hr>
+<h2 id="d6-1-por-que-testar-no-host">1. Por que testar no host</h2>
+<p>O firmware roda no STM32, mas a <strong>lógica</strong> não precisa. Separe:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">app/                     ← regras de negócio: testável no host
+  blink.c                   (sem HAL direta)
+platform/stm32f1/        ← HAL, registradores, st-link
+test/                    ← Unity + CMock, roda no PC</code></pre></div>
+<p>O serviço recebe uma interface, não a HAL:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-c">// app/gpio_port.h
+typedef struct {
+    void (*write)(uint16_t pin, int value);
+    int  (*read)(uint16_t pin);
+} GpioPort;
+
+void blink_init(const GpioPort *port);
+void blink_toggle(void);
+int  blink_is_error(void);</code></pre></div>
+<p>No host, você injeta um mock. Na placa, você injeta a HAL. <strong>A regra não muda.</strong></p>
+<h2 id="d6-2-ceedling-em-10-minutos">2. Ceedling em 10 minutos</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">pipx install ceedling
+ceedling new blink          # cria estrutura (ou use o capstone/)
+cd blink
+ceedling test:all</code></pre></div>
+<p><code>project.yml</code> mínimo:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">:project:
+  :use_exceptions: FALSE
+  :use_test_preprocessor: TRUE
+  :build_root: build
+  :release_build: TRUE
+
+:paths:
+  :test:
+    - test/**
+  :source:
+    - app/**
+  :include:
+    - app/**
+
+:plugins:
+  :load_paths: []
+  :enabled:
+    - stdout_pretty_tests_report
+    - module_generator</code></pre></div>
+<p>Estrutura:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">blink/
+├── app/
+│   ├── blink.c
+│   └── blink.h
+├── test/
+│   ├── test_blink.c
+│   └── mocks/
+│       └── mock_gpio_port.c   (gerado pelo CMock)
+└── project.yml</code></pre></div>
+<h2 id="d6-3-ciclo-tdd-com-o-agente">3. Ciclo TDD com o agente</h2>
+<h3 id="d6-31-vermelho">3.1 Vermelho</h3>
+<p>Prompt:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">Use a skill embedded-unit-tests.
+Crie test/test_blink.c para REQ-001.
+Critérios: LED alterna a cada 500ms no IDLE; fica aceso contínuo em ERROR.
+A porta GPIO é injetada via GpioPort. Mock de write.
+Rode ceedling test:test_blink e mostre a falha. Não implemente blink.c ainda.</code></pre></div>
+<p>Teste esperado:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-c">#include &quot;unity.h&quot;
+#include &quot;blink.h&quot;
+#include &quot;mock_gpio_port.h&quot;
+
+static GpioPort port;
+
+void setUp(void) {
+    port.write = gpio_port_write_Stub;   // gerado pelo CMock
+    port.read  = gpio_port_read_Stub;
+    blink_init(&amp;port);
+}
+
+void tearDown(void) {}
+
+void test_blink_starts_idle_with_led_off(void) {
+    gpio_port_write_Expect(LED_PIN, 0);
+    // primeira chamada acontece no init
+    TEST_ASSERT_FALSE(blink_is_error());
+}
+
+void test_blink_error_keeps_led_on(void) {
+    blink_enter_error();
+    for (int i = 0; i &lt; 3; i++) {
+        gpio_port_write_Expect(LED_PIN, 1);
+        blink_toggle();
+    }
+    TEST_ASSERT_TRUE(blink_is_error());
+}</code></pre></div>
+<p>Na primeira rodada: <code>undefined reference to blink_enter_error</code>. <strong>Isso é o sucesso do passo.</strong></p>
+<h3 id="d6-32-verde">3.2 Verde</h3>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">Agora implemente o mínimo em app/blink.c para passar no teste.
+Sem malloc. Sem printf. Sem HAL. Rode ceedling test:all até ficar verde.</code></pre></div>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-c">#include &quot;blink.h&quot;
+
+static const GpioPort *g_port;
+static int g_error;
+static int g_level;
+
+void blink_init(const GpioPort *port) {
+    g_port = port;
+    g_error = 0;
+    g_level = 0;
+    g_port-&gt;write(LED_PIN, g_level);
+}
+
+void blink_enter_error(void) {
+    g_error = 1;
+}
+
+void blink_toggle(void) {
+    g_level = g_error ? 1 : (g_level ? 0 : 1);
+    g_port-&gt;write(LED_PIN, g_level);
+}
+
+int blink_is_error(void) { return g_error; }</code></pre></div>
+<h3 id="d6-33-refactor-com-verificacao">3.3 Refactor com verificação</h3>
+<p>O <code>Stop</code> hook do Módulo 03 garante que nenhum turno termina com a suíte vermelha. O agente pode refatorar, mas <strong>não consegue dizer "pronto"</strong> sem <code>ceedling test:all</code> passar.</p>
+<h2 id="d6-4-casos-de-borda-que-o-modelo-esquece">4. Casos de borda que o modelo esquece</h2>
+<p>Guarde isto em <code>.claude/skills/embedded-unit-tests/references/edge-cases.md</code>:</p>
+<table><thead><tr>
+<th>Domínio</th>
+<th>Caso</th>
+<th>Por que importa</th>
+</tr></thead><tbody>
+<tr>
+<td>Timer 32-bit @1 kHz</td>
+<td>rollover em 49,7 dias</td>
+<td>comparação com valor absoluto quebra</td>
+</tr>
+<tr>
+<td>Buffer circular</td>
+<td><code>head == tail</code> com cheio vs vazio</td>
+<td>off-by-one clássico</td>
+</tr>
+<tr>
+<td>ISR</td>
+<td>reentrância / variável <code>volatile</code></td>
+<td>corrupção silenciosa</td>
+</tr>
+<tr>
+<td>DMA</td>
+<td>underrun/overrun</td>
+<td>dado travado ou repetido</td>
+</tr>
+<tr>
+<td>ADC</td>
+<td>0, <code>UINT32_MAX</code>, canal desconectado</td>
+<td>leitura fantasy</td>
+</tr>
+<tr>
+<td>I2C</td>
+<td>NACK, clock stretching, busy</td>
+<td>travamento do barramento</td>
+</tr>
+<tr>
+<td>Reset</td>
+<td>watchdog, brownout</td>
+<td>estado inicial inválido</td>
+</tr>
+</tbody></table>
+<blockquote><p>O artigo da Beningo sobre skills cita explicitamente rollover de timer de 32 bits, wraparound de buffer circular e reentrância de ISR. O artigo da BTC mostra o outro lado: <strong>se a IA não consegue gerar o teste a partir do requisito, o requisito está ambíguo.</strong></p></blockquote>
+<h2 id="d6-5-mock-de-hal-sem-perder-a-sanidade">5. Mock de HAL sem perder a sanidade</h2>
+<p>Se você precisar testar algo que chama <code>HAL_GPIO_WritePin</code>, configure o CMock para gerar o mock do header da HAL — <strong>mas nunca inclua a HAL real no teste</strong>:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">:cmock:
+  :mock_prefix: mock_
+  :plugins:
+    - ignore
+    - callback
+    - expect_any_args
+  :treat_externs: :include</code></pre></div>
+<p>Regra para o agente (vai no <code>CLAUDE.md</code>):</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">- Em test/, nunca inclua stm32f1xx_hal.h. Use mock_*.h.
+- Se um teste precisar de hardware real, ele NÃO é unitário: mova para tests/hil/.</code></pre></div>
+<h2 id="d6-6-cobertura-com-proposito">6. Cobertura com propósito</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">ceedling gcov:all
+ceedling utils:gcov</code></pre></div>
+<p>Não persiga 100%. Priorize:</p>
+<ol>
+<li>todo ramo de máquina de estados;</li>
+<li>todo cálculo com timer/contador;</li>
+<li>toda conversão de unidade;</li>
+<li>tratamento de erro de periférico.</li>
+</ol>
+<p>Cobertura de <code>Drivers/</code> gerado não agrega valor — é código de terceiros.</p>
+<h2 id="d6-7-exercicio-05">7. Exercício 05</h2>
+<ol>
+<li>No <code>capstone/</code>, rode <code>ceedling test:all</code> — deve falhar (o teste existe, a implementação não).</li>
+<li>Peça ao Claude para implementar o mínimo. Confira que ele <strong>não</strong> mexeu em <code>Drivers/</code>.</li>
+<li>Peça: *"adicione o caso de rollover 0xFFFFFFFF → 0 do timer"*. O agente deve escrever o teste primeiro.</li>
+<li>Tente finalizar uma mensagem com a suíte vermelha (quebre uma asserção). O <code>Stop</code> hook deve devolver o erro e não deixar terminar.</li>
+</ol>
+<h2 id="d6-8-checklist">8. Checklist</h2>
+<ul>
+<li>□ Teste roda no host, sem placa.</li>
+<li>□ Regra de negócio não inclui header de HAL.</li>
+<li>□ Escrevi o teste <strong>antes</strong> da implementação.</li>
+<li>□ <code>edge-cases.md</code> tem pelo menos 6 entradas.</li>
+<li>□ <code>Stop</code> hook barra turno com teste vermelho.</li>
+<li>□ Cobertura focada em lógica, não em código gerado.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="06-gitlab-ci.md">Módulo 06 — CI/CD no GitLab</a>.</p></section><section class="doc" id="doc-7"><h1 id="d7-modulo-06-cicd-no-gitlab-do-commit-ao-binario-com-evidencia">Módulo 06 — CI/CD no GitLab: do commit ao binário com evidência</h1>
+<p><strong>Tempo:</strong> 40 min · <strong>Entrega:</strong> pipeline <code>build → unit → flash → hil → release</code> no <code>capstone/</code>.</p>
+<hr>
+<h2 id="d7-1-o-desenho-correto-para-firmware">1. O desenho correto para firmware</h2>
+<p>Separe <strong>runners que compilam</strong> de <strong>runners que tocam hardware</strong>. É a decisão de arquitetura mais importante do CI embarcado.</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">MR aberta
+   │
+   ├─ build        (runner docker, cross-compiler)  → artefato .elf/.hex/.bin + mapa
+   ├─ unit         (runner docker, Ceedling)        → junit + cobertura
+   ├─ static       (runner docker, shellcheck/cppcheck)
+   │
+   └─ manual/tag
+      ├─ flash     (runner com ST-Link, tag &quot; stm32-bench&quot;)
+      └─ hil       (mesmo runner, lock de bancada)   → log + screenshot + junit
+          │
+          └─ tag v* → release (changelog de MRs + evidência anexada)</code></pre></div>
+<p>Por que separar: um job I2C na bancada não pode rodar em paralelo com outro I2C na mesma placa. A série do stupid-projects mostra exatamente isso com uma test farm de Nanopis rodando gitlab-runner.</p>
+<h2 id="d7-2-gitlab-ciyml-funcional">2. <code>.gitlab-ci.yml</code> funcional</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">stages: [build, unit, static, flash, hil, release]
+
+variables:
+  GIT_DEPTH: &quot;1&quot;
+  FIRMWARE: &quot;build/firmware.bin&quot;
+  FLASH_ADDR: &quot;0x8000000&quot;
+
+.default_docker: &amp;docker
+  image: registry.gitlab.com/grupo/fw-toolchain:arm-gcc-12
+  tags: [docker]
+  cache:
+    key: &quot;$CI_COMMIT_REF_SLUG&quot;
+    paths: [build/, .deps/]
+
+build:fw:
+  &lt;&lt;: *docker
+  stage: build
+  script:
+    - cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    - cmake --build build -j
+    - arm-none-eabi-size &quot;$FIRMWARE&quot; || arm-none-eabi-size build/firmware.elf
+  artifacts:
+    name: &quot;fw-$CI_COMMIT_SHORT_SHA&quot;
+    paths: [build/firmware.elf, build/firmware.bin, build/firmware.map]
+    expire_in: 1 week
+
+unit:ceedling:
+  &lt;&lt;: *docker
+  stage: unit
+  script:
+    - ceedling test:all
+    - ceedling gcov:all || true
+  artifacts:
+    when: always
+    reports:
+      junit: build/artifacts/test/*.xml
+    paths: [build/artifacts/gcov/]
+    expire_in: 1 week
+
+static:shellcheck:
+  &lt;&lt;: *docker
+  stage: static
+  script:
+    - ./scripts/shellcheck.sh
+    - cppcheck --enable=warning,style --error-exitcode=1 app/ || true
+
+flash:bench:
+  stage: flash
+  tags: [stm32-bench]
+  when: manual
+  allow_failure: false
+  dependencies: [build:fw]
+  script:
+    - flock /tmp/stm32-bench.lock -c &quot;st-flash --reset write $FIRMWARE $FLASH_ADDR&quot;
+  artifacts:
+    reports:
+      junit: reports/hil/flash.xml
+    when: always
+
+hil:gpio:
+  stage: hil
+  tags: [stm32-bench]
+  when: manual
+  dependencies: [flash:bench]
+  script:
+    - flock /tmp/stm32-bench.lock -c &quot;pytest -q tests/hil --junitxml=reports/hil/results.xml&quot;
+  artifacts:
+    when: always
+    paths: [reports/hil/]
+    reports:
+      junit: reports/hil/results.xml
+
+release:tag:
+  stage: release
+  tags: [docker]
+  rules:
+    - if: &#x27;$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/&#x27;
+  script:
+    - glab release create &quot;$CI_COMMIT_TAG&quot; build/firmware.bin --notes &quot;Ver evidência em $CI_PIPELINE_URL&quot;</code></pre></div>
+<p><strong>Pontos a notar:</strong></p>
+<ul>
+<li><code>flock</code> resolve o lock de hardware no mesmo host. Se a bancada é compartilhada entre hosts, use o Device Cloud do GitLab ou um serviço de alocação.</li>
+<li><code>when: manual</code> evita que todo MR gaste a placa. Jobs HIL disparam em MRs marcadas ou em tags.</li>
+<li><code>dependencies</code> limita o que é baixado de estágios anteriores.</li>
+<li><code>artifacts:reports:junit</code> faz o GitLab mostrar falhas na interface do MR.</li>
+<li><code>|| true</code> só onde a falha é informativa — <strong>nunca</strong> no gate principal.</li>
+</ul>
+<h2 id="d7-3-regras-que-reduzem-custo-sem-perder-sinal">3. Regras que reduzem custo sem perder sinal</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">#rode unit/build em todo push, mas HIL só em MRs com-label ou tags
+hil:gpio:
+  rules:
+    - if: &#x27;$CI_PIPELINE_SOURCE == &quot;merge_request_event&quot; &amp;&amp; $CI_MERGE_REQUEST_LABELS =~ /run-hil/&#x27;
+    - if: &#x27;$CI_COMMIT_TAG =~ /^v/&#x27;</code></pre></div>
+<p>Use <code>interruptible: true</code> em pipelines de MR para cancelar execuções obsoletas quando você faz push de novo.</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">default:
+  interruptible: true</code></pre></div>
+<h2 id="d7-4-revisao-e-triagem-com-claude-no-gitlab-ci">4. Revisão e triagem com Claude no GitLab CI</h2>
+<p>A documentação oficial coloca <strong>GitHub Actions ou GitLab CI/CD</strong> como superfícies de automação. O padrão é o mesmo:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">claude:review:
+  stage: static
+  image: registry.gitlab.com/grupo/claude-code:latest
+  tags: [docker]
+  rules:
+    - if: &#x27;$CI_PIPELINE_SOURCE == &quot;merge_request_event&quot;&#x27;
+  variables:
+    ANTHROPIC_API_KEY: $ANTHROPIC_API_KEY
+  script:
+    - claude -p &quot;Revise este diff contra SPEC.md. Reporte só problemas de correção e requisitos sem teste.&quot; \
+        --allowedTools &quot;Read,Grep,Glob,Bash(glab mr diff *)&quot;</code></pre></div>
+<p>Cuidados:</p>
+<ul>
+<li><strong>Não rode com <code>bypassPermissions</code></strong> em CI compartilhado. Use <code>--allowedTools</code> explícito e sandbox.</li>
+<li><code>/code-review</code> local funciona em qualquer plano. O recurso <strong>Claude Ship</strong> (review gerenciado) é Team/Enterprise, ligado por Owner, cobrado à parte e indisponível com ZDR/HIPAA/CMEK — não presuma.</li>
+<li>Em GitLab, revisão por linha de comando depende de <code>glab</code> autenticado; a variável deve ser um token com escopo mínimo e <code>mask</code> no CI.</li>
+</ul>
+<h2 id="d7-5-scheduled-tasks-hil-noturno">5. Scheduled tasks: HIL noturno</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">/schedule 0 3 * * * Rode a suíte HIL, agrupe falhas por causa raiz e abra uma Issue com o REQ afetado. Não grave firmware em produção.</code></pre></div>
+<p>Ou, de forma mais barata e determinística, um <strong>pipeline agendado</strong> no GitLab (<code>CI_PIPELINE_SOURCE == "schedule"</code>) com job HIL e um subagent Haiku só para resumir o log. Lembre do Módulo 03: cada disparo de <code>/schedule</code> envia o contexto da sessão.</p>
+<h2 id="d7-6-exercicio-06">6. Exercício 06</h2>
+<ol>
+<li>Copie o <code>.gitlab-ci.yml</code> acima para o <code>capstone/</code>.</li>
+<li>Ajuste a imagem para a sua toolchain (ou use <code>gcc</code> e compile só os testes no início).</li>
+<li>Rode <code>glab ci status</code>.</li>
+<li>Verifique no MR: artefato baixável, junit aparecendo, job HIL manual.</li>
+<li>Adicione <code>rules</code> para HIL só com label <code>run-hil</code>.</li>
+</ol>
+<h2 id="d7-7-erros-comuns">7. Erros comuns</h2>
+<ul>
+<li>Rodar HIL em todo push → bancada vira gargalo.</li>
+<li>Não travar a placa → dois jobs I2C se corrompem.</li>
+<li><code>artifacts</code> sem <code>when: always</code> → você perde o log exatamente quando falha.</li>
+<li>Colocar token de GitLab em <code>variables</code> sem <code>mask</code>.</li>
+<li>Pedir ao Claude para "consertar a CI" sem dar o log — use <code>glab ci trace</code>.</li>
+</ul>
+<h2 id="d7-8-checklist">8. Checklist</h2>
+<ul>
+<li>□ Runners separados: docker vs bancada.</li>
+<li>□ Lock de hardware implementado.</li>
+<li>□ Artefatos com log mesmo na falha.</li>
+<li>□ JUnit reportado no MR.</li>
+<li>□ HIL manual ou por label.</li>
+<li>□ Token mascarado, permissões mínimas.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="07-hil-bancada.md">Módulo 07 — HIL e bancada</a>.</p></section><section class="doc" id="doc-8"><h1 id="d8-modulo-07-hil-fechando-o-loop-entre-o-agente-e-o-hardware">Módulo 07 — HIL: fechando o loop entre o agente e o hardware</h1>
+<p><strong>Tempo:</strong> 35 min · <strong>Entrega:</strong> teste HIL com lock, log e evidência no MR.</p>
+<hr>
+<h2 id="d8-1-o-problema-estrutural">1. O problema estrutural</h2>
+<blockquote><p>"Compila, passa no unit test, grava o firmware... e falha."</p></blockquote>
+<p>O artigo *AI in hardware-in-the-loop testing: the loop embedded never closed* resume bem: o agente não vê o sinal, o rail de 3,3 V, a prioridade de IRQ sob carga ou o NACK do I2C. Enquanto o loop parar no <code>gcc</code>, ele está adivinhando.</p>
+<p>HIL é o mecanismo que transforma <strong>suposição</strong> em <strong>observação</strong>.</p>
+<h2 id="d8-2-as-quatro-camadas-do-harness">2. As quatro camadas do harness</h2>
+<p>O Embedded AI Harness do Andreas Spiess (vídeo Nov/2026, ESP32) organiza o loop em quatro camadas. O alvo muda, o desenho não:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">HOST    → compila, roda unit tests, gera o binário, decide o próximo passo
+TARGET  → STM32 com ST-Link; grava e inicializa
+BENCH   → Raspberry Pi / Nanopi: fontes, cargas, analisador lógico, relays, UART
+FIELD   → telemetria do equipamento já instalado (opcional, valioso)</code></pre></div>
+<p>Com essa separação, o agente consegue receber <strong>evidência estruturada</strong> de cada camada em vez de um log gigante.</p>
+<p>Camada adicional recomendada: <strong>fault injection</strong> — cortar o rail, injetar NACK, resetar por watchdog. É o que separa "teste bonito" de "teste que sobrevive à produção".</p>
+<h2 id="d8-3-test-farm-com-gitlab-runner">3. Test farm com GitLab Runner</h2>
+<p>Baseado na série DevOps for Embedded (stupid-projects), com STM32F103:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">Nanopi (gitlab-runner, tag stm32-bench)
+ ├── /dev/ttyUSB0        → UART do STM32
+ ├── ST-Link USB         → st-flash
+ ├── GPIO expander I2C   → mede o pino sob teste
+ └── lock file           → /tmp/stm32-bench.lock</code></pre></div>
+<p>Regras de ouro:</p>
+<ol>
+<li><strong>Um job por placa por vez.</strong> I2C e flash não são reentrantes.</li>
+<li><strong>Sempre resetar para estado conhecido</strong> antes do teste.</li>
+<li><strong>Sempre desligar a carga</strong> no <code>after_script</code>.</li>
+<li><strong>Gravar o log mesmo na falha</strong> (<code>artifacts: when: always</code>).</li>
+<li><strong>Não compartilhar runner de build com runner de bancada.</strong></li>
+</ol>
+<h2 id="d8-4-exemplo-de-teste-hil-em-pytest">4. Exemplo de teste HIL em pytest</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-python"># tests/hil/test_gpio.py
+import subprocess, time, serial, pytest
+
+UART = &quot;/dev/ttyUSB0&quot;
+BIN = &quot;build/firmware.bin&quot;
+ADDR = &quot;0x8000000&quot;
+
+@pytest.fixture(scope=&quot;session&quot;, autouse=True)
+def flash_and_boot():
+    subprocess.run(
+        [&quot;st-flash&quot;, &quot;--reset&quot;, &quot;write&quot;, BIN, ADDR], check=True
+    )
+    time.sleep(0.5)
+    yield
+    # after: desliga periféricos / volta ao estado seguro
+
+def test_led_blinks_at_500ms():
+    with serial.Serial(UART, 115200, timeout=3) as ser:
+        edges = []
+        start = time.monotonic()
+        while time.monotonic() - start &lt; 3 and len(edges) &lt; 4:
+            line = ser.readline().decode(errors=&quot;replace&quot;).strip()
+            if line.startswith(&quot;LED:&quot;):
+                edges.append((line, time.monotonic()))
+        assert len(edges) &gt;= 4, f&quot;arestas insuficientes: {edges}&quot;
+        deltas = [t1 - t0 for (_, t0), (_, t1) in zip(edges, edges[1:])]
+        assert all(0.45 &lt;= d &lt;= 0.55 for d in deltas), deltas</code></pre></div>
+<p>No <code>.gitlab-ci.yml</code>:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">hil:gpio:
+  stage: hil
+  tags: [stm32-bench]
+  when: manual
+  dependencies: [flash:bench]
+  script:
+    - flock /tmp/stm32-bench.lock -c &quot;pytest -q tests/hil --junitxml=reports/hil/results.xml&quot;
+  artifacts:
+    when: always
+    paths: [reports/hil/]
+    reports:
+      junit: reports/hil/results.xml</code></pre></div>
+<h2 id="d8-5-o-que-o-agente-deve-receber-de-volta">5. O que o agente deve receber de volta</h2>
+<p>Não despeje o log cru. Use um script de resumo (o mesmo padrão do hook de filtro):</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash"># scripts/hil-summary.sh
+grep -E &#x27;FAIL|ERROR|assert|timeout|NACK|watchdog&#x27; reports/hil/*.log \
+  | tail -n 60</code></pre></div>
+<p>E no prompt do agente:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">Analise reports/hil/summary.txt.
+Para cada falha: REQ afetado, evidência observada, causa raiz provável.
+Não proponha mudança em Drivers/. Não grave firmware.
+Termine em no máximo 10 linhas.</code></pre></div>
+<p>Isso é o <code>hil-analyst</code> do Módulo 04. O custo fica baixo (Haiku + resumo) e o sinal alto.</p>
+<h2 id="d8-6-fault-injection-que-vale-a-pena">6. Fault injection que vale a pena</h2>
+<table><thead><tr>
+<th>Falha injetada</th>
+<th>O que você valida</th>
+</tr></thead><tbody>
+<tr>
+<td>Cortar 3,3 V por 10 ms</td>
+<td>brownout, estado inicial, reset limpo</td>
+</tr>
+<tr>
+<td>NACK no I2C</td>
+<td>retry com backoff, timeout, liberação do barramento</td>
+</tr>
+<tr>
+<td>Watchdog estourado</td>
+<td>recuperação e logging da causa</td>
+</tr>
+<tr>
+<td>DMA underrun</td>
+<td>dado travado/repetido detectado</td>
+</tr>
+<tr>
+<td>UART saturado</td>
+<td>perda de mensagem sem corromper o estado</td>
+</tr>
+</tbody></table>
+<p>Cada injetado deve ter um <code>REQ-###</code> correspondente. Se não tem, você está testando curiosidade, não requisito.</p>
+<h2 id="d8-7-exercicio-07">7. Exercício 07</h2>
+<ol>
+<li>No <code>capstone/</code>, rode <code>pytest -q tests/hil</code> (pode ser com <code>--collect-only</code> se não houver placa).</li>
+<li>Adicione <code>flock</code> ao job e rode duas pipelines em paralelo — o segundo deve esperar.</li>
+<li>Quebre o delay para 300 ms e confirme que o teste falha com deltas fora da faixa.</li>
+<li>Peça ao <code>hil-analyst</code> para resumir a falha e abrir uma issue com <code>REQ-001</code> via <code>glab</code>.</li>
+</ol>
+<h2 id="d8-8-checklist">8. Checklist</h2>
+<ul>
+<li>□ Runner de bancada separado, com tag.</li>
+<li>□ Lock de hardware implementado e testado.</li>
+<li>□ Reset para estado conhecido antes de cada teste.</li>
+<li>□ Limpeza no <code>after_script</code>.</li>
+<li>□ Log e junit salvos mesmo na falha.</li>
+<li>□ Resumo estruturado voltando para o agente.</li>
+<li>□ Pelo menos um caso de fault injection ligado a um REQ.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="08-rastreabilidade.md">Módulo 08 — Rastreabilidade</a>.</p></section><section class="doc" id="doc-9"><h1 id="d9-modulo-08-rastreabilidade-do-requisito-ao-artefato">Módulo 08 — Rastreabilidade: do requisito ao artefato</h1>
+<p><strong>Tempo:</strong> 30 min · <strong>Entrega:</strong> cadeia <code>REQ → Issue → commit → MR → pipeline → release</code> validada por script.</p>
+<hr>
+<h2 id="d9-1-rastreabilidade-e-cadeia-nao-documento">1. Rastreabilidade é cadeia, não documento</h2>
+<p>Um documento de requisitos bonito que ninguém atualiza é pior que nada. O que importa é conseguir responder, em 30 segundos:</p>
+<blockquote><p>"Por que essa linha de <code>blink.c</code> existe, quem aprovou e qual evidência prova que ela funciona?"</p></blockquote>
+<p>A cadeia:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">SPEC.md (REQ-001)
+   ↓
+Issue #42  (label REQ-001)
+   ↓
+commit feat(REQ-001): piscar LED de status #42
+   ↓
+MR !17  (Closes #42, checklist de evidência)
+   ↓
+pipeline: unit ✓  HIL ✓  junit anexado
+   ↓
+release v1.4.2  (changelog gerado dos MRs)</code></pre></div>
+<h2 id="d9-2-gitlab-issues-como-ancora">2. GitLab Issues como âncora</h2>
+<p>O GitLab Requirements Management está em transição para *work items* (epic #5171). Para um dev individual, o desenho pragmático é:</p>
+<ul>
+<li>spec versionada no repo (<code>SPEC.md</code> ou <code>docs/specs/REQ-001.md</code>);</li>
+<li>Issue com o mesmo ID e label;</li>
+<li>MR que <strong>fecha</strong> a Issue (<code>Closes #42</code>);</li>
+<li>evidência de CI como artefato do pipeline.</li>
+</ul>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">glab issue create \
+  --title &quot;REQ-001: LED de status&quot; \
+  --label REQ-001,firmware \
+  --description &quot;Critérios em SPEC.md. Evidência: job hil:gpio.&quot;
+
+glab mr create --fill \
+  --title &quot;REQ-001: piscar LED de status&quot; \
+  --description &quot;Closes #42\n\n- [ ] unit\n- [ ] HIL\n- [ ] ADR atualizado&quot;</code></pre></div>
+<h2 id="d9-3-convencao-de-commit">3. Convenção de commit</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">&lt;tipo&gt;(&lt;REQ&gt;): &lt;resumo imperativo&gt; #&lt;issue&gt;
+
+feat(REQ-001): piscar LED de status #42
+fix(REQ-003): retry no I2C após NACK #47
+test(REQ-001): cobre rollover do timer #42
+docs(REQ-001): registra decisão de OSAL #42</code></pre></div>
+<p>Tipos: <code>feat</code>, <code>fix</code>, <code>test</code>, <code>refactor</code>, <code>docs</code>, <code>chore</code>, <code>ci</code>.</p>
+<p>O ID aparece <strong>duas vezes</strong> (no escopo e no <code>#issue</code>) de propósito: uma para o script validar, outra para o GitLab linkar.</p>
+<h2 id="d9-4-validador-deterministico">4. Validador determinístico</h2>
+<p>Não confie no agente para lembrar. Coloque no <code>PreToolUse</code> ou no CI:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">#!/usr/bin/env bash
+# scripts/check-traceability.sh
+set -euo pipefail
+
+msg_file=&quot;${1:-.git/COMMIT_EDITMSG}&quot;
+msg=$(cat &quot;$msg_file&quot;)
+
+if [[ &quot;$msg&quot; =~ ^(feat|fix|test|refactor|docs|chore|ci)\(REQ-[0-9]{3}\) ]]; then
+  if [[ &quot;$msg&quot; =~ \#([0-9]+) ]]; then
+    echo &quot;OK: requisito e issue presentes&quot;
+    exit 0
+  fi
+fi
+
+echo &quot;ERRO: use tipo(REQ-NNN): descricao #issue&quot; &gt;&amp;2
+exit 2</code></pre></div>
+<p>No GitLab CI, valide o *range* do MR:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">trace:commits:
+  stage: static
+  script:
+    - |
+      for c in $(git log --format=%s &quot;$CI_MERGE_REQUEST_DIFF_BASE_SHA&quot;..HEAD); do
+        ./scripts/check-traceability.sh &lt;(printf &#x27;%s&#x27; &quot;$c&quot;) || exit 1
+      done
+  rules:
+    - if: &#x27;$CI_PIPELINE_SOURCE == &quot;merge_request_event&quot;&#x27;</code></pre></div>
+<p>E no hook local:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-json">{
+  &quot;hooks&quot;: {
+    &quot;PreToolUse&quot;: [
+      {
+        &quot;matcher&quot;: &quot;Bash&quot;,
+        &quot;hooks&quot;: [
+          { &quot;command&quot;: &quot;./scripts/hook-commit-guard.sh&quot;, &quot;onFailure&quot;: &quot;block&quot; }
+        ]
+      }
+    ]
+  }
+}</code></pre></div>
+<p>O script só intercepta <code>git commit</code>, chama o validador e deixa todo o resto passar.</p>
+<h2 id="d9-5-adr-com-secao-compliance">5. ADR com seção <code>Compliance</code></h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown"># ADR-007 — Isolar HAL atrás de GpioPort
+
+- Status: aceito
+- REQ: REQ-001, REQ-004
+
+## Contexto
+A HAL gerada pelo CubeMX muda entre revisões. Testes no host não podem incluí-la.
+
+## Decisão
+Toda lógica de app/ recebe uma interface GpioPort injetada.
+
+## Alternativas
+1. Chamar HAL diretamente — rejeitado: impossível testar no host.
+2. Copiar a HAL para test/ — rejeitado: divergência silenciosa.
+
+## Consequências
++ Testes determinísticos no host.
++ Um adaptador por família de MCU.
+
+## Compliance
+- Verificação: `test/test_blink.c` usa mock_gpio_port.h; CI falha se app/ incluir stm32f1xx_hal.h.
+- Onde roda: job `unit:ceedling` + grep no stage static.
+- Evidência: artifact `build/artifacts/test/*.xml`.</code></pre></div>
+<p>A seção <code>Compliance</code> é o que impede a ADR de virar literatura. Ela responde: <strong>como uma máquina prova que essa decisão foi respeitada?</strong></p>
+<h2 id="d9-6-skill-user-stories-como-gerador-de-rastreabilidade">6. Skill <code>/user-stories</code> como gerador de rastreabilidade</h2>
+<p>A skill do Módulo 02 deve sempre emitir:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">REQ-001 — Piscar LED de status
+História: Como operador, quero ver o LED piscar em IDLE para saber que o firmware está vivo.
+
+Critérios (Given-When-Then):
+- Dado o estado IDLE, quando 500 ms se passam, então o LED inverte.
+- Dado o estado ERROR, quando a task roda, então o LED fica aceso.
+
+Rastreabilidade:
+- Issue: #42
+- Teste unitário: test/test_blink.c
+- Teste HIL: tests/hil/test_gpio.py
+- Evidência: job hil:gpio</code></pre></div>
+<p>Se a skill não consegue preencher os quatro campos, o requisito não está pronto — e é melhor parar aqui.</p>
+<h2 id="d9-7-exercicio-08">7. Exercício 08</h2>
+<ol>
+<li>Crie a Issue <code>REQ-001</code> com <code>glab</code>.</li>
+<li>Faça um commit <strong>sem</strong> o padrão e confirme que o hook barra.</li>
+<li>Refaça com <code>feat(REQ-001): ... #42</code>.</li>
+<li>Escreva a ADR-007 com <code>Compliance</code>.</li>
+<li>Rode <code>/code-review</code> pedindo só isto: *"todo requisito de SPEC.md tem teste e Issue?"*</li>
+</ol>
+<h2 id="d9-8-checklist">8. Checklist</h2>
+<ul>
+<li>□ Cada REQ tem Issue, teste unitário, teste HIL e ADR quando aplicável.</li>
+<li>□ Commit segue <code>tipo(REQ-NNN): ... #issue</code>.</li>
+<li>□ Validador roda local <strong>e</strong> no CI.</li>
+<li>□ MR fecha a Issue.</li>
+<li>□ Evidência do pipeline está anexada ao MR/release.</li>
+<li>□ <code>/code-review</code> já foi usado como auditoria de spec.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="09-releases.md">Módulo 09 — Releases e governança leve</a>.</p></section><section class="doc" id="doc-10"><h1 id="d10-modulo-09-releases-e-governanca-leve">Módulo 09 — Releases e governança leve</h1>
+<p><strong>Tempo:</strong> 25 min · <strong>Entrega:</strong> tag de release com changelog e evidência anexada.</p>
+<hr>
+<h2 id="d10-1-release-e-um-contrato-nao-um-zip">1. Release é um contrato, não um zip</h2>
+<p>Para firmware, release precisa responder:</p>
+<table><thead><tr>
+<th>Pergunta</th>
+<th>Onde está</th>
+</tr></thead><tbody>
+<tr>
+<td>O que mudou?</td>
+<td>changelog gerado dos MRs mesclados</td>
+</tr>
+<tr>
+<td>Qual versão do firmware está gravada?</td>
+<td>string de versão no binário + tag <code>vX.Y.Z+k&lt;revisão&gt;</code></td>
+</tr>
+<tr>
+<td>Quais requisitos foram validados?</td>
+<td>relatório de cobertura + junit do HIL</td>
+</tr>
+<tr>
+<td>Quem aprovou?</td>
+<td>MR com aprovação e compliance check</td>
+</tr>
+<tr>
+<td>Como reproduzir?</td>
+<td>commit SHA + imagem da toolchain + <code>docs/ops/verification.md</code></td>
+</tr>
+</tbody></table>
+<h2 id="d10-2-versionamento-com-chave-de-hardware">2. Versionamento com chave de hardware</h2>
+<p>O padrão que funciona bem quando o firmware acompanha revisão de placa:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">v1.4.2+k7
+│ │ │ └─ revisão de hardware/placa (k7)
+│ │ └─── patch
+│ └───── minor
+└─────── major</code></pre></div>
+<p>A chave <code>k7</code> evita um clássico: gravar <code>v1.4.2</code> de placa revisão 6 em placa revisão 7. No <code>CLAUDE.md</code>:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">- A tag de release segue vMAJOR.MINOR.PATCH+kREV.
+- Nunca grave firmware com `k` diferente da revisão do hardware de destino.</code></pre></div>
+<p>E no C:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-c">#define FW_VERSION &quot;v1.4.2+k7&quot;</code></pre></div>
+<p>O job de build extrai a tag e falha se a constante divergir:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">tag=&quot;${CI_COMMIT_TAG:-dev}&quot;
+grep -q &quot;$tag&quot; app/version.h || { echo &quot;versão divergente&quot; &gt;&amp;2; exit 2; }</code></pre></div>
+<h2 id="d10-3-changelog-a-partir-de-mrs">3. Changelog a partir de MRs</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-yaml">release:tag:
+  stage: release
+  rules:
+    - if: &#x27;$CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+/&#x27;
+  script:
+    - glab release create &quot;$CI_COMMIT_TAG&quot; build/firmware.bin \
+        --notes &quot;$(./scripts/changelog.sh)&quot;</code></pre></div>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">#!/usr/bin/env bash
+# scripts/changelog.sh
+echo &quot;## Mudanças&quot;
+git log --pretty=format:&#x27;- %s&#x27; &quot;$(git describe --tags --abbrev=0 HEAD^)&quot;..HEAD \
+  | grep -E &#x27;^- (feat|fix)&#x27;
+echo
+echo &quot;## Evidência&quot;
+echo &quot;- Pipeline: $CI_PIPELINE_URL&quot;
+echo &quot;- HIL: artifact reports/hil/results.xml&quot;
+echo &quot;- Cobertura: artifact build/artifacts/gcov/&quot;</code></pre></div>
+<h2 id="d10-4-runbook-de-verificacao">4. Runbook de verificação</h2>
+<p><code>docs/ops/verification.md</code> deve ser curto e executável:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown"># Verificação de release v1.4.2+k7
+
+1. Baixe o artefato `fw-&lt;sha&gt;` do pipeline &lt;link&gt;.
+2. Confira a string de versão na UART: `FW v1.4.2+k7`.
+3. Rode `./scripts/verify-image.sh firmware.bin` (checksum + header).
+4. Reexecutar HIL: ver `reports/hil/results.xml`.
+5. Se falhar: `/rewind` no commit anterior e abra Issue com label `regression`.</code></pre></div>
+<p>Nota importante sobre o caso real que estudamos antes: num repositório sem histórico Git local, commits/issues são conhecidos apenas por documentação e referências <code>#NN</code>. <strong>Não faça isso.</strong> Release sem histórico verificável é só um binário órfão.</p>
+<h2 id="d10-5-revisao-final-antes-de-taguear">5. Revisão final antes de taguear</h2>
+<p>Quatro verificações, em ordem de custo:</p>
+<ol>
+<li><strong>Prompt/agente:</strong> <code>/verify</code> — Claude builda, roda e olha o resultado.</li>
+<li><strong>Revisor independente:</strong> <code>/code-review</code> numa MR, subagent que não viu a conversa.</li>
+<li><strong>Gates determinísticos:</strong> Stop hook local + CI (unit, static, HIL, traceabilidade).</li>
+<li><strong>Checklist humana:</strong> 5 itens no máximo. Checklist longa ninguém lê.</li>
+</ol>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">- [ ] Versão no binário bate com a tag
+- [ ] HIL verde no commit exato da tag
+- [ ] ADRs de REQs afetados atualizados
+- [ ] Changelog gerado de MRs
+- [ ] Artefato e junit anexados ao release</code></pre></div>
+<h2 id="d10-6-governanca-corporativa-referencia-rapida">6. Governança corporativa (referência rápida)</h2>
+<p>Não é alvo deste workshop, mas saiba que existe:</p>
+<ul>
+<li><strong>Compliance frameworks</strong> no GitLab: exigem aprovação/checks específicos em MRs.</li>
+<li><strong>Managed settings</strong>: única fonte de regra que o dev não consegue sobrescrever; vem de console/MDM.</li>
+<li><strong>ZDR / HIPAA / CMEK</strong>: restrições de recursos gerenciados — alguns recursos de review na nuvem ficam indisponíveis.</li>
+</ul>
+<p>Para dev individual, o equivalente saudável é: <code>.claude/settings.json</code> versionado + CI obrigatória + proteção de branch. Não precisa de MDM para ter disciplina.</p>
+<h2 id="d10-7-exercicio-09">7. Exercício 09</h2>
+<ol>
+<li>Crie <code>app/version.h</code> com <code>FW_VERSION</code>.</li>
+<li>Rode o job de build com <code>CI_COMMIT_TAG=v1.4.2+k7</code> e veja falhar (versão divergente).</li>
+<li>Ajuste a constante, re rode, e crie o release com <code>glab release create</code>.</li>
+<li>Baixe o artefato e rode o checksum do runbook.</li>
+</ol>
+<h2 id="d10-8-checklist">8. Checklist</h2>
+<ul>
+<li>□ Tag <code>vMAJOR.MINOR.PATCH+kREV</code>.</li>
+<li>□ Versão no binário validada no CI.</li>
+<li>□ Changelog gerado de MRs, não escrito à mão.</li>
+<li>□ Evidência (junit, cobertura, pipeline) anexada ao release.</li>
+<li>□ Runbook com 5 passos executáveis.</li>
+<li>□ <code>/verify</code> + <code>/code-review</code> rodados antes da tag.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="10-capstone.md">Módulo 10 — Capstone</a>.</p></section><section class="doc" id="doc-11"><h1 id="d11-modulo-10-capstone-montando-o-sistema-completo">Módulo 10 — Capstone: montando o sistema completo</h1>
+<p><strong>Tempo:</strong> 60 min · <strong>Entrega:</strong> o diretório <code>capstone/</code> copiado para um projeto GitLab STM32 real.</p>
+<hr>
+<h2 id="d11-1-objetivo">1. Objetivo</h2>
+<p>Reunir tudo em um esqueleto reutilizável. O capstone não é um firmware completo — é a <strong>configuração que faz o firmware completo ser desenvolvido com segurança, rastreabilidade e custo consciente</strong>.</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">capstone/
+├── CLAUDE.md                         ← restrições curtas e universais
+├── SPEC.md                           ← REQ-001 com critérios testáveis
+├── .gitlab-ci.yml                    ← build → unit → static → flash → hil → release
+├── .claude/
+│   ├── settings.json                 ← deny rules + Stop hook
+│   ├── rules/generated.md            ← só carrega em Drivers/**
+│   ├── agents/reviewer.md            ← Read, Grep, Glob
+│   └── skills/
+│       ├── user-stories/SKILL.md
+│       ├── embedded-unit-tests/SKILL.md
+│       └── release-notes/SKILL.md
+├── scripts/
+│   ├── check-traceability.sh
+│   ├── filter-test-output.sh
+│   └── block-generated.sh
+├── app/
+│   ├── blink.c
+│   ├── blink.h
+│   └── version.h
+├── test/test_blink.c
+├── tests/hil/test_gpio.py
+└── docs/
+    ├── decisions/ADR-007.md
+    └── ops/verification.md</code></pre></div>
+<h2 id="d11-2-sequencia-de-execucao-guiada">2. Sequência de execução guiada</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash">cd /workspace/projetos/study/capstone
+claude</code></pre></div>
+<p>Cole no Claude, em ordem:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text">1. Leia SPEC.md e CLAUDE.md. Explique o que você não conseguiria descobrir só com o código.
+
+2. Use a skill user-stories para transformar REQ-001 em critérios Given-When-Then com rastreabilidade.
+
+3. Use a skill embedded-unit-tests para escrever o teste de blink_enter_error(). Mostre o vermelho. Rode ceedling test:test_blink.
+
+4. Implemente o mínimo em app/blink.c. Rode ceedling test:all até verde.
+
+5. Escreva o ADR-007 usando a skill /adr, com a seção Compliance apontando para o job unit:ceedling.
+
+6. Faça o commit seguindo a convenção. Mostre o comando exato.
+
+7. Crie a Issue com glab e a MR com Closes #42.
+
+8. Use o agente reviewer para auditar: todo REQ tem teste, Issue e evidência?
+
+9. Mostre o diff final e o comando para disparar o job HIL manual.</code></pre></div>
+<p>Em cada passo, o agente deve encontrar uma das camadas do Módulo 00. Se alguma etapa "passar batido" (ex.: ele esquece o commit guard), a auditoria do capstone encontrou um gap — é isso que você corrige.</p>
+<h2 id="d11-3-matriz-de-cobertura-do-capstone">3. Matriz de cobertura do capstone</h2>
+<table><thead><tr>
+<th>Camada</th>
+<th>Onde está</th>
+<th>Como provar</th>
+</tr></thead><tbody>
+<tr>
+<td>Contexto</td>
+<td><code>CLAUDE.md</code>, <code>SPEC.md</code>, <code>.claude/rules/</code></td>
+<td><code>/context all</code> + <code>&lt;200 linhas</code></td>
+</tr>
+<tr>
+<td>Skills</td>
+<td>3 <code>SKILL.md</code> + <code>references/</code></td>
+<td><code>/skills</code>, <code>/context</code> antes/depois</td>
+</tr>
+<tr>
+<td>Isolamento</td>
+<td><code>reviewer.md</code>, sandbox strict</td>
+<td>tentar editar com o reviewer</td>
+</tr>
+<tr>
+<td>Hooks</td>
+<td>deny <code>Drivers/**</code>, Stop teste, filtro de log</td>
+<td><code>/hooks</code>, <code>--debug-file</code></td>
+</tr>
+<tr>
+<td>Integração</td>
+<td><code>glab</code> noCI e local</td>
+<td><code>glab ci status</code></td>
+</tr>
+<tr>
+<td>Orquestração</td>
+<td><code>.gitlab-ci.yml</code>, tag de release</td>
+<td>artefatos + junit no MR</td>
+</tr>
+<tr>
+<td>Rastreabilidade</td>
+<td><code>REQ-001 → #42 → MR → v1.4.2+k7</code></td>
+<td><code>check-traceability.sh</code></td>
+</tr>
+<tr>
+<td>Custo</td>
+<td><code>/usage</code> antes/depois</td>
+<td>cache hit &gt; 80%, sem MCP ocioso</td>
+</tr>
+</tbody></table>
+<h2 id="d11-4-auditoria-final-o-que-um-revisor-deve-perguntar">4. Auditoria final (o que um revisor deve perguntar)</h2>
+<ol>
+<li><strong>Existe alguma regra escrita só em texto que deveria ser hook?</strong> Se sim, mova.</li>
+<li><strong><code>CLAUDE.md</code> tem mais de 200 linhas?</strong> Migre procedimentos para skills.</li>
+<li><strong>O agente consegue editar código gerado?</strong> Se consegue, o deny rule falhou.</li>
+<li><strong>Um turno termina com teste vermelho?</strong> Se termina, o Stop hook falhou.</li>
+<li><strong>O HIL roda em todo push?</strong> Se roda, você está queimando bancada à toa.</li>
+<li><strong>Dois jobs I2C podem rodar juntos?</strong> Se podem, você vai corromper a bancada.</li>
+<li><strong>Dá para rastrear o binário até o REQ?</strong> Se não dá, a release é órfã.</li>
+<li><strong><code>/usage</code> mostra &gt;30% em um MCP que você usa uma vez por semana?</strong> Desligue.</li>
+</ol>
+<h2 id="d11-5-extensoes-opcionais">5. Extensões opcionais</h2>
+<h3 id="d11-agent-sdk">Agent SDK</h3>
+<p>Quando a CLI não basta — por exemplo, um serviço que responde a um webhook do GitLab e abre Issue automaticamente a partir de falha HIL:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-python">from claude_agent_sdk import query
+
+async for message in query(
+    prompt=&quot;Resuma este log de HIL e abra uma Issue com o REQ afetado.&quot;,
+    options={&quot;allowed_tools&quot;: [&quot;Read&quot;, &quot;Grep&quot;]},
+):
+    print(message)</code></pre></div>
+<p>Use quando houver <strong>orquestração programática</strong>, não para substituir a CLI.</p>
+<h3 id="d11-dynamic-workflows">Dynamic workflows</h3>
+<p>A documentação traz workflows para orquestrar muitos subagents (ex.: auditoria de todos os REQs em paralelo). É poderoso e caro: cada agente tem contexto próprio. Só entre nesse módulo depois de medir <code>/usage</code> com o capstone simples.</p>
+<h2 id="d11-6-entregaveis-para-o-workshop">6. Entregáveis para o workshop</h2>
+<p>Ao final, cada participante leva:</p>
+<ul>
+<li>□ <code>capstone/</code> funcional no próprio projeto GitLab;</li>
+<li>□ livro <code>livro/index.html</code> (offline, imprimível);</li>
+<li>□ plano de aula e slides;</li>
+<li>□ vídeo curto (NotebookLM) + vídeo completo (Claude Code);</li>
+<li>□ um <code>efficiency-and-security.md</code> com <code>/usage</code> antes/depois e a lista de regras que viraram hook.</li>
+</ul>
+<p>Modelo para esse último arquivo:</p>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-markdown">| Métrica | Antes | Depois |
+|---|---|---|
+| Cache hit (`/usage`) | 41% | 92% |
+| Tokens por turno (spinner) | 18k | 3k |
+| MCP ativos | 5 | 1 (glab via CLI) |
+| Regras só em texto | 9 | 2 |
+| Hooks/deny rules | 0 | 4 |
+| Turnos terminando com teste vermelho | 3 | 0 |</code></pre></div>
+<h2 id="d11-7-checklist-final">7. Checklist final</h2>
+<ul>
+<li>□ Capstone roda <code>ceedling test:all</code> verde.</li>
+<li>□ Pipeline GitLab passa até <code>unit</code> e <code>static</code>.</li>
+<li>□ HIL manual com lock e evidência.</li>
+<li>□ Commit guardado por script.</li>
+<li>□ Release com tag versionada e changelog.</li>
+<li>□ <code>/usage</code> medido e registrado.</li>
+<li>□ Auditoria das 8 perguntas respondida por escrito.</li>
+</ul>
+<p><strong>Próximo:</strong> <a href="apendice-gitlab-vs-github.md">Apêndice — GitLab vs GitHub Actions e referência rápida</a>.</p></section><section class="doc" id="doc-12"><h1 id="d12-apendice-gitlab-vs-github-actions-e-referencia-rapida">Apêndice — GitLab vs GitHub Actions (e referência rápida)</h1>
+<p>Este workshop prioriza <strong>GitLab</strong> porque o projeto de destino é GitLab + STM32. O material oficial trata os dois como superfícies de primeira classe, mas os detalhes operacionais diferem.</p>
+<hr>
+<h2 id="d12-1-comparacao-curta">1. Comparação curta</h2>
+<table><thead><tr>
+<th>Assunto</th>
+<th>GitLab</th>
+<th>GitHub Actions</th>
+</tr></thead><tbody>
+<tr>
+<td>Pipeline</td>
+<td><code>.gitlab-ci.yml</code></td>
+<td><code>.github/workflows/*.yml</code></td>
+</tr>
+<tr>
+<td>Unidade de trabalho</td>
+<td><code>job</code> dentro de <code>stage</code></td>
+<td><code>job</code> dentro de <code>workflow</code></td>
+</tr>
+<tr>
+<td>Revisão de código</td>
+<td>MR, <code>glab mr</code></td>
+<td>PR, <code>gh pr</code></td>
+</tr>
+<tr>
+<td>Runner com hardware</td>
+<td><code>tags: [stm32-bench]</code> + self-hosted runner</td>
+<td><code>runs-on: [self-hosted, stm32-bench]</code></td>
+</tr>
+<tr>
+<td>Artefatos</td>
+<td><code>artifacts:</code> com <code>reports: junit:</code></td>
+<td><code>actions/upload-artifact</code> + <code>dorny/test-reporter</code></td>
+</tr>
+<tr>
+<td>Lock de bancada</td>
+<td><code>flock</code> no runner ou Device Cloud</td>
+<td><code>flock</code> no runner ou serviço externo</td>
+</tr>
+<tr>
+<td>Revisão por IA na nuvem</td>
+<td>integração documentada via GitLab CI/CD</td>
+<td>Claude Ship (Team/Enterprise) e GitHub Action</td>
+</tr>
+<tr>
+<td>Comentários inline</td>
+<td>MR review via <code>glab</code>/API</td>
+<td><code>REVIEW.md</code> <strong>só</strong> no serviço gerenciado do GitHub</td>
+</tr>
+<tr>
+<td>Triagem de Issues</td>
+<td>automação via GitLab CI + <code>glab</code></td>
+<td>GitHub Action + <code>gh</code></td>
+</tr>
+<tr>
+<td>Agendamento</td>
+<td>pipeline <code>schedule</code> ou <code>/schedule</code></td>
+<td><code>schedule:</code> no workflow</td>
+</tr>
+</tbody></table>
+<p><strong>Regra de ouro:</strong> a lógica TDD/HIL/rastreabilidade é <strong>independente do forge</strong>. O que muda é a casca (comandos <code>glab</code> vs <code>gh</code>, sintaxe do YAML, onde o junit aparece).</p>
+<h2 id="d12-2-equivalencias-de-comando">2. Equivalências de comando</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-bash"># listar pipeline
+glab ci status                       |  gh run list
+
+# ver log
+glab ci trace &lt;job-id&gt;               |  gh run view --log
+
+# criar MR / PR
+glab mr create --fill                |  gh pr create --fill
+
+# comentar
+glab mr note 17 -m &quot;HIL verde&quot;       |  gh pr comment 17 -b &quot;HIL verde&quot;
+
+# baixar artefato
+glab ci artifacts &lt;job-id&gt;           |  gh run download &lt;run-id&gt;</code></pre></div>
+<h2 id="d12-3-sobre-code-review-local">3. Sobre <code>/code-review</code> local</h2>
+<ul>
+<li>Funciona em <strong>qualquer plano</strong>, dentro do terminal, revisando o diff local.</li>
+<li>Em GitLab, para comentar diretamente na MR você depende de <code>glab</code> autenticado: <code>/code-review --comment !123</code>.</li>
+<li><code>REVIEW.md</code> é específico do serviço gerenciado do GitHub; <strong>não</strong> é um formato universal de relatório.</li>
+<li>Claude Ship (review gerenciado) é recurso Team/Enterprise, ligado por Owner, cobrado à parte e indisponível com ZDR/HIPAA/CMEK. Não faça plano dependendo dele sem confirmar.</li>
+</ul>
+<h2 id="d12-4-referencia-rapida-de-comandos-do-material">4. Referência rápida de comandos do material</h2>
+<div class="code-wrap"><button class="copy" type="button">copiar</button><pre><code class="language-text"># Claude Code
+/quickstart  /model  /context  /usage  /clear  /compact  /skills
+/hooks  /mcp  /code-review  /verify  /rewind  /sandbox  /doctor
+Shift+Tab        alterna plan mode
+Esc              para a ação atual
+f (em /usage)    aplica recomendações automáticas
+ultrathink      Deep reasoning só na próxima mensagem
+
+# Firmware
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j
+ceedling test:all
+ceedling test:test_blink
+ceedling gcov:all
+st-flash --reset write build/firmware.bin 0x8000000
+pytest -q tests/hil --junitxml=reports/hil/results.xml
+flock /tmp/stm32-bench.lock -c &quot;...&quot;
+
+# GitLab
+glab auth login
+glab issue create --title &quot;REQ-001: ...&quot; --label REQ-001
+glab mr create --fill
+glab ci status
+glab release create v1.4.2+k7 build/firmware.bin --notes &quot;...&quot;</code></pre></div>
+<h2 id="d12-5-glossario">5. Glossário</h2>
+<table><thead><tr>
+<th>Termo</th>
+<th>Significado aqui</th>
+</tr></thead><tbody>
+<tr>
+<td><strong>Harness</strong></td>
+<td>O programa Claude Code, distinto do modelo. É ele que executa hooks e permissões.</td>
+</tr>
+<tr>
+<td><strong>Determinístico</strong></td>
+<td>Executado pelo harness sempre, independente da decisão do modelo.</td>
+</tr>
+<tr>
+<td><strong>Progressive disclosure</strong></td>
+<td>Carregar nome/descrição agora, conteúdo completo só quando necessário.</td>
+</tr>
+<tr>
+<td><strong>HIL</strong></td>
+<td>Hardware-in-the-Loop: teste executado contra a placa real.</td>
+</tr>
+<tr>
+<td><strong>SIL/PIL</strong></td>
+<td>Software-/Processor-in-the-Loop: etapas intermediárias antes do hardware.</td>
+</tr>
+<tr>
+<td><strong>CMock</strong></td>
+<td>Gera mocks a partir de headers C; usado com Unity/Ceedling.</td>
+</tr>
+<tr>
+<td><strong>Stop hook</strong></td>
+<td>Hook que roda quando Claude tenta encerrar o turno; exit 2 bloqueia.</td>
+</tr>
+<tr>
+<td><strong>Sentinel</strong></td>
+<td>Valor falso mostrado ao comando no lugar da credencial real (modo <code>mask</code>).</td>
+</tr>
+<tr>
+<td><strong>REQ-###</strong></td>
+<td>Identificador estável de requisito, usado do spec ao release.</td>
+</tr>
+</tbody></table>
+<h2 id="d12-6-leitura-adicional">6. Leitura adicional</h2>
+<ul>
+<li><a href="<a href="https://code.claude.com/docs/en/overview">Overview">https://code.claude.com/docs/en/overview">Overview</a> oficial</a> — porta de entrada.</li>
+<li><a href="<a href="https://code.claude.com/docs/llms.txt">llms.txt">https://code.claude.com/docs/llms.txt">llms.txt</a></a> — índice completo e sempre atualizado.</li>
+<li><a href="../referencias.md">Referências consolidadas</a> — todas as fontes com o módulo em que são usadas.</li>
+</ul></section><section class="doc" id="doc-13"><h1 id="d13-referencias-consolidadas">Referências consolidadas</h1>
+<p>Pesquisa realizada em <strong>24/11/2026</strong>. Critério: priorizar fonte primária (documentação oficial, autores que mostram código, vídeos com demonstração) em vez de lista genérica de "IA para programar".</p>
+<p><strong>Índice oficial atualizado da documentação:</strong> &lt;<a href="https://code.claude.com/docs/llms.txt&gt;">https://code.claude.com/docs/llms.txt&gt;</a> — use-o para confirmar mudanças de bandeiras, versões e páginas.</p>
+<p>A coluna <strong>Uso</strong> diz em qual módulo do estudo a fonte é explorada.</p>
+<hr>
+<h2 id="d13-1-anthropic-claude-code-fonte-primaria">1. Anthropic / Claude Code — fonte primária</h2>
+<table><thead><tr>
+<th>Fonte</th>
+<th>Tipo</th>
+<th>O que buscar</th>
+<th>Uso</th>
+</tr></thead><tbody>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/overview">Overview">https://code.claude.com/docs/en/overview">Overview</a></a></td>
+<td>Docs</td>
+<td>Superfícies (CLI, VS Code, JetBrains, Desktop, Web), <code>CLAUDE.md</code>/<code>AGENTS.md</code>, hooks, skills, subagents, MCP, scheduled tasks, automação em <strong>GitHub Actions ou GitLab CI/CD</strong>.</td>
+<td>00, 04, 06</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/quickstart">Quickstart">https://code.claude.com/docs/en/quickstart">Quickstart</a></a></td>
+<td>Docs</td>
+<td>Instalação nativa, <code>/quickstart</code>, primeiro loop.</td>
+<td>00</td>
+</tr>
+<tr>
+<td><a href="<a href="https://academy.claude.com/courses/claude-code-101">Claude">https://academy.claude.com/courses/claude-code-101">Claude</a> Academy — Claude Code 101</a></td>
+<td>Curso gratuito</td>
+<td>Noção inicial em vídeo, bom para escalar o time.</td>
+<td>00, vídeo</td>
+</tr>
+<tr>
+<td><a href="<a href="https://academy.claude.com/courses/claude-code-in-action">Claude">https://academy.claude.com/courses/claude-code-in-action">Claude</a> Academy — Claude Code in Action</a></td>
+<td>Curso gratuito</td>
+<td>Continuação com casos de uso.</td>
+<td>00, vídeo</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/best-practices">Best">https://code.claude.com/docs/en/best-practices">Best</a> practices</a></td>
+<td>Docs</td>
+<td><strong>O texto mais importante do conjunto</strong>: determinístico vs não determinístico, "diga o que Claude não vê", "dê um check para rodar", <code>Stop</code> hook, subagent revisor com <code>Read,Grep,Glob</code>, <code>/code-review</code>, <code>/verify</code>, <code>/effort</code>.</td>
+<td>01, 03, 04, 08</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/costs">Manage">https://code.claude.com/docs/en/costs">Manage</a> costs effectively</a></td>
+<td>Docs</td>
+<td><code>/usage</code>, atribuição por skill/subagent/MCP/<code>loop</code>, tecla <code>f</code>, cache hit, token ao lado do spinner, <code>/clear</code> vs <code>/compact</code>, hooks de pré-processamento, MCP vs CLI, modelo/effort, causas de consumo em sessão longa.</td>
+<td>03</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/prompt-caching">Prompt">https://code.claude.com/docs/en/prompt-caching">Prompt</a> caching</a></td>
+<td>Docs</td>
+<td>TTL (1h em assinatura, 5min na API), o que invalida cache, troca de modelo, <code>/compact</code>, como ler o hit rate.</td>
+<td>03</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/model-config">Model">https://code.claude.com/docs/en/model-config">Model</a> configuration</a></td>
+<td>Docs</td>
+<td><code>/model</code>, <code>/effort</code> (<code>low</code>/<code>high</code>/<code>xhigh</code>/<code>max</code>), <code>ultrathink</code>, <code>MAX_THINKING_TOKENS</code>, auto-compact.</td>
+<td>03</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/permission-modes">Permission">https://code.claude.com/docs/en/permission-modes">Permission</a> modes</a></td>
+<td>Docs</td>
+<td>Auto mode (classifier, padrão desde v2.1.283), manual, plan mode, <code>bypassPermissions</code>, o que o classifier bloqueia.</td>
+<td>03</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/sandboxing">Sandboxing">https://code.claude.com/docs/en/sandboxing">Sandboxing</a></a></td>
+<td>Docs</td>
+<td>O que o sandbox cobre e <strong>o que fica fora</strong> (file tools, hooks, MCP local, LSP, <code>!</code>), <code>bubblewrap</code>+<code>socat</code>, strict mode, <code>credentials</code> deny/mask, protected paths, <code>excludedCommands</code>.</td>
+<td>03</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/memory">Memory">https://code.claude.com/docs/en/memory">Memory</a> / CLAUDE.md</a></td>
+<td>Docs</td>
+<td>Escrever instruções eficazes, alvo &lt;200 linhas, regras por <code>paths:</code> em <code>.claude/rules/</code>, <code>CLAUDE.local.md</code>.</td>
+<td>01</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/skills">Skills">https://code.claude.com/docs/en/skills">Skills</a></a></td>
+<td>Docs</td>
+<td><code>SKILL.md</code>, progressive disclosure, quando o conteúdo é carregado, <code>/skills</code>.</td>
+<td>02</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/sub-agents">Subagents">https://code.claude.com/docs/en/sub-agents">Subagents</a></a></td>
+<td>Docs</td>
+<td><code>model: haiku</code>, <code>tools: Read, Grep, Glob</code>, foreground vs background, custo próprio.</td>
+<td>04</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/hooks">Hooks">https://code.claude.com/docs/en/hooks">Hooks</a></a> e <a href="<a href="https://code.claude.com/docs/en/hooks-guide">guia">https://code.claude.com/docs/en/hooks-guide">guia</a></a></td>
+<td>Docs</td>
+<td><code>PreToolUse</code>, <code>PostToolUse</code>, <code>Stop</code>, exit 2, <code>onFailure: "block"</code>, workspace trust.</td>
+<td>03, 04, 05</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/mcp">MCP">https://code.claude.com/docs/en/mcp">MCP</a></a></td>
+<td>Docs</td>
+<td>Definições deferidas, <code>/mcp</code>, desligar servidor sem remover, tool search.</td>
+<td>04</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/code-review-local">Local">https://code.claude.com/docs/en/code-review-local">Local</a> code review</a></td>
+<td>Docs</td>
+<td><code>/code-review</code> funciona local em qualquer plano; revisor em subagent que não viu a conversa.</td>
+<td>08</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/workflows">Workflows">https://code.claude.com/docs/en/workflows">Workflows</a></a> e <a href="<a href="https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code">blog">https://claude.com/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code">blog</a></a></td>
+<td>Docs/Blog</td>
+<td>Orquestração de muitos subagents; módulo avançado opcional.</td>
+<td>04</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/scheduled-tasks">Scheduled">https://code.claude.com/docs/en/scheduled-tasks">Scheduled</a> tasks</a></td>
+<td>Docs</td>
+<td><code>/schedule</code>, tarefas noturnas (ex.: análise de falhas HIL) com custo consciente.</td>
+<td>06</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/gitlab-ci-cd">GitLab">https://code.claude.com/docs/en/gitlab-ci-cd">GitLab</a> CI/CD com Claude Code</a></td>
+<td>Docs</td>
+<td>Configuração de review/triagem via GitLab CI, first-class ao lado do GitHub Actions.</td>
+<td>06</td>
+</tr>
+<tr>
+<td><a href="<a href="https://code.claude.com/docs/en/agent-sdk/overview">Agent">https://code.claude.com/docs/en/agent-sdk/overview">Agent</a> SDK</a></td>
+<td>Docs</td>
+<td>Quando sair da CLI e orquestrar programaticamente (opcional).</td>
+<td>10</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.anthropic.com/research/claude-code-best-practices">Anthropic">https://www.anthropic.com/research/claude-code-best-practices">Anthropic</a> — agentic coding best practices</a></td>
+<td>Artigo</td>
+<td>Base conceitual por trás da página de best practices.</td>
+<td>00</td>
+</tr>
+</tbody></table>
+<h2 id="d13-2-ia-aplicada-a-firmware-stm32">2. IA aplicada a firmware / STM32</h2>
+<table><thead><tr>
+<th>Fonte</th>
+<th>Tipo</th>
+<th>O que buscar</th>
+<th>Uso</th>
+</tr></thead><tbody>
+<tr>
+<td><a href="<a href="https://www.beningo.com/why-claude-code-for-firmware-development-matters/">Why">https://www.beningo.com/why-claude-code-for-firmware-development-matters/">Why</a> Claude Code for Firmware Development Matters</a> — Jacob Beningo, 20/11/2025</td>
+<td>Artigo</td>
+<td><code>CLAUDE.md</code> com <strong>STM32L476RG</strong>, orçamento de RAM/Flash, "nunca malloc/printf", errata de I2C, harness de simulação, scaffolding de testes.</td>
+<td>00, 01</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.beningo.com/claude-code-skills-embedded-developers/">Claude">https://www.beningo.com/claude-code-skills-embedded-developers/">Claude</a> Code Skills: A Practical Guide for Embedded Developers</a> — 19/03/2026</td>
+<td>Artigo</td>
+<td>Skills <code>/user-stories</code> (INVEST + Given-When-Then), <code>/embedded-unit-tests</code> (Unity/CppUTest + <code>references/mocking.md</code> e <code>edge-cases.md</code>: rollover de timer 32-bit em 49,7 dias, wraparound de buffer circular, reentrância de ISR) e skill de ADR com seção <strong>Compliance</strong>.</td>
+<td>02, 05, 08</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.beningo.com/agentic-zephyr-development-build-flash-fix/">From">https://www.beningo.com/agentic-zephyr-development-build-flash-fix/">From</a> AI-Assisted to Agentic Zephyr Development: Build, Flash, Fix</a> — 24/09/2026</td>
+<td>Artigo</td>
+<td>Loop build→flash→observe→fix. Alvo é Zephyr/NXP, padrão serve ao STM32.</td>
+<td>07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.beningo.com/zephyr-devicetree-with-ai/">Zephyr">https://www.beningo.com/zephyr-devicetree-with-ai/">Zephyr</a> Devicetree with AI: A Self-Validating Skill Guide</a></td>
+<td>Artigo</td>
+<td>Skill que valida o próprio resultado — ideia transferível para <code>device tree</code>/CubeMX.</td>
+<td>02</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.learnwitharobot.com/p/tutorial-use-anthropic-claude-code">Tutorial:">https://www.learnwitharobot.com/p/tutorial-use-anthropic-claude-code">Tutorial:</a> usar Claude Code em firmware de robótica</a></td>
+<td>Tutorial</td>
+<td>Passo a passo para escrever firmware com agente.</td>
+<td>00</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.btc-embedded.com/test-driven-development-meets-generative-ai">Test">https://www.btc-embedded.com/test-driven-development-meets-generative-ai">Test</a> Driven Development Meets Generative AI</a> — Artem Oppermann, 19/05/2025</td>
+<td>Artigo (vendor)</td>
+<td>IA gera teste a partir de requisito em linguagem natural; <strong>se não consegue gerar, o requisito está ambíguo</strong>. Não substitui model checking/ISO 26262.</td>
+<td>05, 08</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.btc-embedded.com/product/btc-testagent/">BTC">https://www.btc-embedded.com/product/btc-testagent/">BTC</a> TestAgent</a></td>
+<td>Produto (vendor)</td>
+<td>Geração autônoma de testes HIL de nível de sistema. Referência de mercado, não receita gratuita.</td>
+<td>07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://arxiv.org/abs/2604.03135">AI-Assisted">https://arxiv.org/abs/2604.03135">AI-Assisted</a> Unit Test Writing and Test-Driven Code Refactoring: A Case Study</a> — 2026</td>
+<td>Artigo acadêmico</td>
+<td>Evidência sobre geração de testes e refatoração segura.</td>
+<td>05</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.beningo.com/podcast/">Embedded">https://www.beningo.com/podcast/">Embedded</a> Build Process: 5 Signs It's Holding You Back</a></td>
+<td>Podcast</td>
+<td>Diagnóstico de build/testing lento — motivação para CI eficiente.</td>
+<td>06</td>
+</tr>
+</tbody></table>
+<h2 id="d13-3-gitlab-embedded-hil">3. GitLab + embedded / HIL</h2>
+<table><thead><tr>
+<th>Fonte</th>
+<th>Tipo</th>
+<th>O que buscar</th>
+<th>Uso</th>
+</tr></thead><tbody>
+<tr>
+<td><a href="<a href="https://about.gitlab.com/blog/4-ways-to-accelerate-embedded-development-with-gitlab/">4">https://about.gitlab.com/blog/4-ways-to-accelerate-embedded-development-with-gitlab/">4</a> ways to accelerate embedded development with GitLab</a> — Matt DeLaney &amp; Darwin Sanoy, 05/06/2025</td>
+<td>Blog oficial</td>
+<td>SIL→PIL→HIL em pipelines, Device Cloud, <strong>demo do Embedded World 2025 de 24:42 a 36:51</strong>, compliance como código e MR gating.</td>
+<td>06, 07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://about.gitlab.com/blog/why-now-is-the-time-for-embedded-devsecops/">Why">https://about.gitlab.com/blog/why-now-is-the-time-for-embedded-devsecops/">Why</a> now is the time for embedded DevSecOps</a> — 01/07/2025</td>
+<td>Blog oficial</td>
+<td>Feedback lento, compliance manual, ilhas de desenvolvimento; componente <a href="<a href="https://gitlab.com/guided-explorations/embedded/ci-components/device-cloud">On-Prem">https://gitlab.com/guided-explorations/embedded/ci-components/device-cloud">On-Prem</a> Device Cloud</a>.</td>
+<td>06, 09</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.youtube.com/watch?v=WFSQrmdDHIY">GitLab">https://www.youtube.com/watch?v=WFSQrmdDHIY">GitLab</a> Unfiltered — Hardware In the CI Loop</a> (update: &lt;<a href="https://youtu.be/PHQ5sw6SPDQ&gt;">https://youtu.be/PHQ5sw6SPDQ&gt;</a>)</td>
+<td>Vídeo</td>
+<td>Darwin Sanoy sobre hardware dentro do CI loop.</td>
+<td>06, 07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://gitlab.com/guided-explorations/embedded/workshops/embedded-devops-workshop-refactoring-to-ci">Embedded">https://gitlab.com/guided-explorations/embedded/workshops/embedded-devops-workshop-refactoring-to-ci">Embedded</a> DevOps Workshop</a> + <a href="<a href="https://gitlab.com/guided-explorations/embedded/workshops/embedded-devops-workshop-refactoring-to-ci/-/blob/main/TUTORIAL2.md">TUTORIAL2.md">https://gitlab.com/guided-explorations/embedded/workshops/embedded-devops-workshop-refactoring-to-ci/-/blob/main/TUTORIAL2.md">TUTORIAL2.md</a></a></td>
+<td>Tutorial oficial</td>
+<td>Build automatizado em pipeline GitLab.</td>
+<td>06</td>
+</tr>
+<tr>
+<td><a href="<a href="https://gitlab.com/explore/projects/topics/Working+Examples+for+Embedded+Hardware+In+the+Loop+%2528HIL%2529+Testing+Using+GitLab+CI">Exemplos">https://gitlab.com/explore/projects/topics/Working+Examples+for+Embedded+Hardware+In+the+Loop+%2528HIL%2529+Testing+Using+GitLab+CI">Exemplos</a> de HIL com GitLab CI</a></td>
+<td>Repositórios</td>
+<td>Bancada, ambiente GUI e firmware prontos para study.</td>
+<td>07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://321gang.com/gitlab-as-a-tool-for-ci-cd-in-embedded-systems-development-a-step-by-step-guide/">GitLab">https://321gang.com/gitlab-as-a-tool-for-ci-cd-in-embedded-systems-development-a-step-by-step-guide/">GitLab</a> as a Tool for CI/CD in Embedded Systems Development</a></td>
+<td>Guia (vendor)</td>
+<td>Git LFS, submodules, HIL, análise estática passo a passo.</td>
+<td>06</td>
+</tr>
+<tr>
+<td><a href="<a href="https://about.gitlab.com/blog/introducing-custom-compliance-frameworks-in-gitlab/">Custom">https://about.gitlab.com/blog/introducing-custom-compliance-frameworks-in-gitlab/">Custom</a> Compliance Frameworks no GitLab</a></td>
+<td>Blog oficial</td>
+<td>Como exigir aprovação/checks em MRs. Visão de governança, não implementação obrigatória.</td>
+<td>09</td>
+</tr>
+<tr>
+<td><a href="<a href="https://docs.gitlab.com/user/project/requirements/">Requirements">https://docs.gitlab.com/user/project/requirements/">Requirements</a> management</a> e <a href="<a href="https://gitlab.com/groups/gitlab-org/-/work_items/5171">epic">https://gitlab.com/groups/gitlab-org/-/work_items/5171">epic</a> #5171</a></td>
+<td>Docs</td>
+<td>Atenção: requirements migram para work items. Prefira <strong>spec versionada + Issues + MRs + evidência de CI</strong>.</td>
+<td>08</td>
+</tr>
+</tbody></table>
+<h2 id="d13-4-stm32-gitlab-ci-na-pratica">4. STM32 + GitLab CI na prática</h2>
+<table><thead><tr>
+<th>Fonte</th>
+<th>Tipo</th>
+<th>O que buscar</th>
+<th>Uso</th>
+</tr></thead><tbody>
+<tr>
+<td><a href="<a href="https://www.stupid-projects.com/posts/devops-for-embedded-part-2/">DevOps">https://www.stupid-projects.com/posts/devops-for-embedded-part-2/">DevOps</a> for Embedded — parte 2</a> — Dimitris Tassopoulos, 2019/att 2024</td>
+<td>Artigo</td>
+<td>CDE em Docker/Packer, <code>gitlab-ci.yml</code> build→testes→artefato, runners EC2, comparação de tempos.</td>
+<td>06</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.stupid-projects.com/posts/devops-for-embedded-part-3/">DevOps">https://www.stupid-projects.com/posts/devops-for-embedded-part-3/">DevOps</a> for Embedded — parte 3</a></td>
+<td>Artigo</td>
+<td><strong>O mais relevante do conjunto</strong>: unit tests com CppUTest, mock de hardware, estágios <code>build → flash → test</code>, test farm com Nanopi rodando gitlab-runner, <code>st-flash --reset write ... 0x8000000</code>, testes com Robot Framework lendo GPIO via I2C, e por que não rodar dois jobs I2C no mesmo hardware em paralelo.</td>
+<td>05, 06, 07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://gitlab.com/dimtass/stm32f103-i2c-io-expander">Repo">https://gitlab.com/dimtass/stm32f103-i2c-io-expander">Repo</a> <code>stm32f103-i2c-io-expander</code></a></td>
+<td>Código</td>
+<td>Firmware de exemplo usado na série.</td>
+<td>05, 07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://dev.st.com/stm32cube-docs/stm32cubeide-vscode/latest/en/docs/markup/development/testing_validation.html">STM32CubeIDE">https://dev.st.com/stm32cube-docs/stm32cubeide-vscode/latest/en/docs/markup/development/testing_validation.html">STM32CubeIDE</a> for VS Code — Testing and validation</a></td>
+<td>Docs ST</td>
+<td>HIL no contexto STM32.</td>
+<td>07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://hubble.com/community/guides/how-to-set-up-ci-cd-for-embedded-projects/">How">https://hubble.com/community/guides/how-to-set-up-ci-cd-for-embedded-projects/">How</a> to Set Up CI/CD for Embedded Projects</a></td>
+<td>Guia</td>
+<td>Cross-compilação, unit tests em host, emulação (exemplo GitHub Actions; traduzir os conceitos para GitLab).</td>
+<td>06</td>
+</tr>
+</tbody></table>
+<blockquote><p>Os posts do stupid-projects são de 2019, atualizados em 2024. A arquitetura separando runner de build do runner com hardware continua válida.</p></blockquote>
+<h2 id="d13-5-loop-fechado-ia-escreve-testa-no-hardware-corrige">5. Loop fechado: IA escreve → testa no hardware → corrige</h2>
+<table><thead><tr>
+<th>Fonte</th>
+<th>Tipo</th>
+<th>O que buscar</th>
+<th>Uso</th>
+</tr></thead><tbody>
+<tr>
+<td><a href="<a href="https://www.youtube.com/watch?v=HmNyyT2poF8">From">https://www.youtube.com/watch?v=HmNyyT2poF8">From</a> Idea to Working ESP32 — AI Does Everything!</a> — Andreas Spiess, Nov/2026</td>
+<td>Vídeo</td>
+<td><strong>Embedded AI Harness</strong>: container + testbench Raspberry Pi + quatro camadas <strong>host → target → bench → field</strong> + fault injection + testes caixa-preta. ESP32/ESP-IDF, padrão transplantável para STM32.</td>
+<td>07, 10</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.geeky-gadgets.com/ai-driven-esp32-development/">Automate">https://www.geeky-gadgets.com/ai-driven-esp32-development/">Automate</a> ESP32 Development Using an Embedded AI Harness</a> — 09/11/2026</td>
+<td>Artigo</td>
+<td>Resumo das quatro camadas e do loop de refinamento guiado por especificação.</td>
+<td>07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://betterdevices.io/blog/ai-in-hardware-in-the-loop-testing-the-loop-embedded-never-closed/">AI">https://betterdevices.io/blog/ai-in-hardware-in-the-loop-testing-the-loop-embedded-never-closed/">AI</a> in hardware-in-the-loop testing: the loop embedded never closed</a> — 21/09/2026</td>
+<td>Artigo</td>
+<td>Tese: "compila, passa no unit test, grava e falha" é problema estrutural — o agente não vê sinal, rail de 3,3 V ou prioridade de IRQ sob carga.</td>
+<td>07</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.youtube.com/results?search_query=Hardware-in-the-Loop+Testing+Kernels+on+Real+CPUs+Richard+Seidl">Hardware-in-the-Loop">https://www.youtube.com/results?search_query=Hardware-in-the-Loop+Testing+Kernels+on+Real+CPUs+Richard+Seidl">Hardware-in-the-Loop</a> Testing: Kernels on Real CPUs</a></td>
+<td>Podcast/vídeo</td>
+<td>Conversa sobre HIL em kernels reais (buscar pelo título).</td>
+<td>07</td>
+</tr>
+</tbody></table>
+<h2 id="d13-6-base-tdd-testes-em-c">6. Base TDD / testes em C</h2>
+<table><thead><tr>
+<th>Fonte</th>
+<th>Tipo</th>
+<th>O que buscar</th>
+<th>Uso</th>
+</tr></thead><tbody>
+<tr>
+<td><a href="<a href="https://dmitryfrank.com/articles/unit_testing_embedded_c_applications">Unit-testing">https://dmitryfrank.com/articles/unit_testing_embedded_c_applications">Unit-testing</a> (embedded) C applications with Ceedling</a></td>
+<td>Artigo</td>
+<td>Unity + CMock + CException, TDD host-based em C.</td>
+<td>05</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.embedded.com/modern-unit-testing-in-c-with-tdd-and-ceedling/">Modern">https://www.embedded.com/modern-unit-testing-in-c-with-tdd-and-ceedling/">Modern</a> unit testing in C with TDD and Ceedling</a></td>
+<td>Artigo</td>
+<td>Introdução consolidada ao ecossistema.</td>
+<td>05</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.debassociates.com/blog/test-driven-development-for-embedded-software-with-unity-and-ceedling/">TDD">https://www.debassociates.com/blog/test-driven-development-for-embedded-software-with-unity-and-ceedling/">TDD</a> for Embedded Software with Unity and Ceedling</a></td>
+<td>Artigo</td>
+<td>Exemplo passo a passo.</td>
+<td>05</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.elektormagazine.com/articles/test-driven-development-tdd-in-firmware-writing">Test-Driven">https://www.elektormagazine.com/articles/test-driven-development-tdd-in-firmware-writing">Test-Driven</a> Development (TDD) in Firmware Writing</a></td>
+<td>Artigo</td>
+<td>Mentalidade test-first para firmware.</td>
+<td>05</td>
+</tr>
+<tr>
+<td><a href="<a href="https://www.google.com/search?q=Test+Driven+Development+for+Embedded+C+Grenning">Test">https://www.google.com/search?q=Test+Driven+Development+for+Embedded+C+Grenning">Test</a> Driven Development for Embedded C — James W. Grenning</a></td>
+<td>Livro</td>
+<td>Referência clássica (já listada no <code>readme.md</code> original).</td>
+<td>05</td>
+</tr>
+</tbody></table>
+<h2 id="d13-7-como-manter-esta-lista-viva">7. Como manter esta lista viva</h2>
+<ol>
+<li>Rode <code>curl -fsSL https://code.claude.com/docs/llms.txt | grep -i &lt;assunto&gt;</code> para descobrir novas páginas.</li>
+<li>Para cada fonte nova, registre <strong>data de acesso</strong>, <strong>o que muda na prática</strong> e <strong>qual módulo usa</strong>.</li>
+<li>Se a fonte for de vendor, marque <code>(vendor)</code> — não venda conclusão de ferramenta como verdade universal.</li>
+<li>Se o vídeo estiver em outro idioma, anote o minuto exato da demonstração; é isso que economiza tempo na hora de gravar a aula.</li>
+</ol></section></main><div class="top-actions"><button id="theme" type="button">tema</button><button onclick="window.print()" type="button">imprimir / PDF</button></div><script>
+const sidebar = document.getElementById('sidebar');
+const search = document.getElementById('search');
+const links = [...document.querySelectorAll('#toc a')];
+const progress = document.getElementById('progress');
+
+search.addEventListener('input', () => {
+  const q = search.value.toLowerCase().trim();
+  links.forEach(a => {
+    a.classList.toggle('hidden', q !== '' && !a.textContent.toLowerCase().includes(q));
+  });
+});
+
+document.querySelectorAll('.copy').forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const text = btn.nextElementSibling.innerText;
+    try {
+      await navigator.clipboard.writeText(text);
+      btn.textContent = 'copiado';
+    } catch (e) {
+      btn.textContent = 'falhou';
+    }
+    setTimeout(() => btn.textContent = 'copiar', 1200);
+  });
+});
+
+function updateActive() {
+  const scroll = window.scrollY;
+  const height = document.documentElement.scrollHeight - window.innerHeight;
+  progress.style.width = (height > 0 ? (scroll / height) * 100 : 0) + '%';
+  let current = links[0];
+  for (const a of links) {
+    const el = document.getElementById(a.dataset.target);
+    if (el && el.getBoundingClientRect().top < 160) current = a;
+  }
+  links.forEach(a => a.classList.remove('active'));
+  if (current) current.classList.add('active');
+}
+window.addEventListener('scroll', updateActive, { passive: true });
+updateActive();
+
+document.getElementById('theme').addEventListener('click', () => {
+  document.body.classList.toggle('light');
+  localStorage.setItem('livro-tema', document.body.classList.contains('light') ? 'light' : 'dark');
+});
+if (localStorage.getItem('livro-tema') === 'light') document.body.classList.add('light');
+</script></body></html>

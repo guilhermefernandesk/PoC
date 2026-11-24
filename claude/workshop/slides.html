@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workshop — Claude Code para Firmware STM32 + GitLab</title>
+<style>
+:root{--bg:#0c1116;--fg:#e6edf3;--mut:#93a4b5;--acc:#6cc0ff;--bd:#273746;--panel:#141c25}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:18px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+#bar{position:fixed;top:0;left:0;height:4px;background:var(--acc);width:0;z-index:9}
+.wrap{max-width:1080px;margin:0 auto;padding:70px 34px 110px}
+.slide{display:none;min-height:70vh;border-bottom:1px solid var(--bd);padding-bottom:30px}
+.slide.on{display:block}
+h1{font-size:46px;line-height:1.15;margin:.2em 0}
+h2{font-size:34px;margin:.1em 0 .6em;color:var(--acc)}
+h3{font-size:23px;margin:1.2em 0 .3em}
+small,.mut{color:var(--mut)}
+code{background:#0a0f14;padding:2px 6px;border-radius:4px;font-size:.88em}
+pre{background:#080d12;border:1px solid var(--bd);border-radius:10px;padding:16px 18px;overflow:auto;font-size:15px;line-height:1.45}
+pre code{background:none;padding:0}
+blockquote{border-left:4px solid var(--acc);background:rgba(108,192,255,.07);margin:18px 0;padding:10px 18px;color:#cfe3f5}
+table{border-collapse:collapse;width:100%;font-size:16px}
+th,td{border:1px solid var(--bd);padding:9px 12px;text-align:left;vertical-align:top}
+th{background:var(--panel)}
+ul,ol{max-width:90ch}
+li{margin:7px 0}
+.nav{position:fixed;bottom:18px;right:20px;display:flex;gap:8px;align-items:center}
+.nav button{background:var(--panel);color:var(--fg);border:1px solid var(--bd);border-radius:22px;padding:9px 16px;cursor:pointer;font-size:14px}
+#counter{color:var(--mut);font-size:14px;margin-right:8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--bd);border-radius:10px;padding:14px 16px}
+.card b{color:var(--acc)}
+@media print{
+  #bar,.nav{display:none}
+  .slide{display:block!important;page-break-after:always;min-height:auto;border:0}
+  body{background:#fff;color:#000;font-size:12pt}
+  pre{background:#f4f6f8;color:#111}
+  h2{color:#064b85}
+}
+</style>
+</head>
+<body>
+<div id="bar"></div>
+<div class="wrap">
+
+<section class="slide on">
+<small>WORKSHOP · 90 MIN · PT-BR</small>
+<h1>Claude Code para<br>firmware STM32 + GitLab</h1>
+<p class="mut">TDD · testes unitários · HIL · CI/CD · releases · rastreabilidade<br>com atenção a tokens, acurácia e segurança.</p>
+<blockquote>IA não é o problema. O problema é ela decidir com informação incompleta e ninguém ter um cheque determinístico para barrar.</blockquote>
+<small>→ use as setas para navegar · P para imprimir</small>
+</section>
+
+<section class="slide">
+<h2>O que você vai levar</h2>
+<ol>
+<li>Um modelo mental de <b>6 camadas</b> para organizar o uso do agente.</li>
+<li>Um <code>CLAUDE.md</code> curto, com restrições que o código não conta.</li>
+<li>Skills que transformam requisito em teste e evidência.</li>
+<li>Hooks e deny rules para o que <b>não pode ter exceção</b>.</li>
+<li>Um pipeline GitLab com HIL travado e rastreável.</li>
+<li>Números de antes/depois de consumo com <code>/usage</code>.</li>
+</ol>
+</section>
+
+<section class="slide">
+<h2>Por que firmware é diferente</h2>
+<table>
+<tr><th>Realidade</th><th>Consequência</th></tr>
+<tr><td>RAM/Flash contadas em bytes</td><td>"funciona no host" não é prova</td></tr>
+<tr><td>Hardware fora do processo</td><td>compilar não valida o GPIO</td></tr>
+<tr><td>Errata de silício</td><td>o modelo não vê a revisão C do datasheet</td></tr>
+<tr><td>Feedback lento</td><td>retrabalho é caro</td></tr>
+<tr><td>Release é binário versionado</td><td>rastrear até o REQ é parte do produto</td></tr>
+</table>
+</section>
+
+<section class="slide">
+<h2>As 6 camadas</h2>
+<div class="grid">
+<div class="card"><b>1. Contexto</b><br>CLAUDE.md, SPEC.md, @arquivo, regras por caminho</div>
+<div class="card"><b>2. Skills</b><br>procedimentos carregados só quando chamados</div>
+<div class="card"><b>3. Isolamento</b><br>subagents, permissões, sandbox</div>
+<div class="card"><b>4. Hooks</b><br>o harness executa, o modelo não decide</div>
+<div class="card"><b>5. Integração</b><br>glab/MCP, Issues, MRs</div>
+<div class="card"><b>6. Orquestração</b><br>GitLab CI, scheduled tasks, Agent SDK</div>
+</div>
+<p class="mut">1–2 aumentam acerto · 3–4 aumentam segurança · 5–6 fecham a evidência</p>
+</section>
+
+<section class="slide">
+<h2>Uma config, várias superfícies</h2>
+<pre><code>curl -fsSL https://claude.ai/install.sh | bash
+claude --version
+claude
+&gt; /quickstart
+&gt; /doctor
+&gt; /sandbox</code></pre>
+<p>Mesmo motor em terminal, VS Code, JetBrains, Desktop e Web. <code>CLAUDE.md</code>, settings e MCP valem em todos.</p>
+<p class="mut"><code>AGENTS.md</code> é suportado no lugar de <code>CLAUDE.md</code>.</p>
+</section>
+
+<section class="slide">
+<h2>Contexto: escreva o que o código não diz</h2>
+<pre><code># Commands
+- Unit tests: ceedling test:all
+- Flash: st-flash --reset write build/firmware.bin 0x8000000
+
+# Conventions
+- Regras de negócio em app/; nunca em Drivers/
+- Sem malloc/printf; use osal_log()
+
+# Gotchas
+- Rev C do ADC exige 1µs extra após CS (ERRATA-042)
+- Timer 32-bit @1kHz vira em 49,7 dias
+
+# Verification
+- "Pronto" = ceedling test:all &amp;&amp; ./scripts/shellcheck.sh</code></pre>
+<p class="mut">Alvo: &lt; 200 linhas. <code>/init</code> gera; o trabalho é remover.</p>
+</section>
+
+<section class="slide">
+<h2>Spec primeiro, sessão nova depois</h2>
+<pre><code>sessão A (brainstorm)  →  SPEC.md
+        ↓
+sessão B (limpa)       →  implementação
+        ↓
+sessão C (revisor)     →  subagent vs SPEC.md</code></pre>
+<blockquote>Se a IA não consegue gerar o teste a partir do requisito, o requisito está ambíguo. — BTC / Beningo</blockquote>
+</section>
+
+<section class="slide">
+<h2>Skills = progressive disclosure</h2>
+<pre><code>.claude/skills/
+└── embedded-unit-tests/
+    ├── SKILL.md          # nome + descrição + passos
+    └── references/
+        ├── mocking.md
+        └── edge-cases.md  # carrega só se necessário</code></pre>
+<ul>
+<li>Claude vê nome + descrição em toda sessão.</li>
+<li>O conteúdo completo entra só quando a skill é chamada.</li>
+<li>Procedimento longo vai para skill, não para <code>CLAUDE.md</code>.</li>
+</ul>
+</section>
+
+<section class="slide">
+<h2>A pergunta que muda tudo</h2>
+<h3>Isso é sugestão ou imposição?</h3>
+<table>
+<tr><th>Tipo</th><th>Onde</th><th>Garante?</th></tr>
+<tr><td>prompt, CLAUDE.md, skill</td><td>modelo decide</td><td>não</td></tr>
+<tr><td>hook, deny rule, managed setting</td><td>harness executa</td><td><b>sim</b></td></tr>
+</table>
+<blockquote>Se você reforçou a linha do CLAUDE.md e ainda falha, vai para hook. Se é preferência, volta para o prompt.</blockquote>
+</section>
+
+<section class="slide">
+<h2>Meça antes de otimizar</h2>
+<pre><code>/usage
+
+Session
+  Usage by model: claude-sonnet-4-6 ... cache read 940.0k
+  Prompt cache (main): 14 requests · 91% from cache · 2 misses
+  Attribution: skills 12% · subagents 18% · MCP gitlab 31%</code></pre>
+<ul>
+<li><code>f</code> aplica recomendações automáticas.</li>
+<li>O número ao lado do spinner mede só o <b>output</b> do turno.</li>
+<li><code>/context</code> mostra o que ocupa espaço.</li>
+</ul>
+</section>
+
+<section class="slide">
+<h2>As seis ações de maior impacto</h2>
+<ol>
+<li><code>/clear</code> entre tarefas não relacionadas (custa zero).</li>
+<li><code>/compact keep the firmware changes and the test commands</code>.</li>
+<li>CLI em vez de MCP para operações simples: <code>glab</code>, <code>git</code>, <code>make</code>.</li>
+<li>Sonnet para rotina, Opus para arquitetura, Haiku para subagent simples.</li>
+<li><code>/effort low|high|max</code> e <code>ultrathink</code> pontual.</li>
+<li>Hook <code>PreToolUse</code> cortando log de teste para 100 linhas.</li>
+</ol>
+</section>
+
+<section class="slide">
+<h2>Segurança: o sandbox não cobre tudo</h2>
+<table>
+<tr><th>Dentro do sandbox</th><th>Fora do sandbox</th></tr>
+<tr><td>Bash, PowerShell, Monitor e filhos</td><td>Read/Edit/Write/WebFetch</td></tr>
+<tr><td>filesystem: cwd + temp + --add-dir</td><td>hooks, MCP local, LSP, status line</td></tr>
+<tr><td>rede via proxy com allowlist</td><td>comandos digitados em <code>!</code></td></tr>
+</table>
+<pre><code>sudo apt-get install -y bubblewrap socat
+claude --settings '{"sandbox":{"enabled":true,
+  "allowUnsandboxedCommands":false,"failIfUnavailable":true}}'</code></pre>
+</section>
+
+<section class="slide">
+<h2>Regra dura em ação</h2>
+<pre><code>// .claude/settings.json
+"permissions": { "deny": ["Edit(Drivers/**)", "Write(Drivers/**)"] },
+"hooks": {
+  "Stop": [{ "hooks": [{ "command":
+    "ceedling test:all >/dev/null 2&gt;&amp;1 || { echo 'teste vermelho' &gt;&amp;2; exit 2; }"
+  }]}]
+}</code></pre>
+<ul>
+<li>Exit <code>2</code> devolve o erro e não deixa o turno terminar.</li>
+<li><code>onFailure: "block"</code> impede passagem se o scanner cair.</li>
+<li>Use <code>command</code>/<code>http</code>/<code>mcp_tool</code>: <code>prompt</code>/<code>agent</code> não são determinísticos.</li>
+</ul>
+</section>
+
+<section class="slide">
+<h2>Revisor que não pode editar</h2>
+<pre><code>---
+name: reviewer
+tools: Read, Grep, Glob
+model: sonnet
+---
+Para cada requisito em SPEC.md:
+  existe teste? existe Issue? existe evidência?
+  o diff tocou código gerado?</code></pre>
+<p>A limitação de ferramentas é imposta pelo <b>harness</b>, não pedida em texto.</p>
+<p class="mut">/code-review local funciona em qualquer plano e usa um subagent que não viu a conversa.</p>
+</section>
+
+<section class="slide">
+<h2>TDD em C no host</h2>
+<pre><code>1. skill embedded-unit-tests escreve test/test_blink.c
+2. ceedling test:test_blink  → VERMELHO
+   undefined reference to blink_enter_error
+3. implemente o mínimo em app/blink.c
+4. ceedling test:all         → VERDE
+5. Stop hook garante que ninguém diga "pronto" antes disso</code></pre>
+<p class="mut">Regra: teste nunca inclui <code>stm32f1xx_hal.h</code>. Use <code>mock_*.h</code> do CMock.</p>
+</section>
+
+<section class="slide">
+<h2>Casos de borda que o modelo esquece</h2>
+<ul>
+<li>Timer 32-bit @1kHz: rollover em <b>49,7 dias</b>.</li>
+<li>Buffer circular: cheio e vazio com <code>head == tail</code>.</li>
+<li>ISR: variável sem <code>volatile</code>, reentrância.</li>
+<li>DMA: underrun travando o dado.</li>
+<li>I2C: NACK, clock stretching, bus busy.</li>
+<li>Reset: watchdog, brownout, estado inicial inválido.</li>
+</ul>
+<p class="mut">Guarde em <code>references/edge-cases.md</code> da skill.</p>
+</section>
+
+<section class="slide">
+<h2>GitLab CI: separe quem compila de quem toca a placa</h2>
+<pre><code>stages: [build, unit, static, flash, hil, release]
+
+build:fw      tags: [docker]        → .elf/.bin/.map
+unit:ceedling tags: [docker]        → junit + cobertura
+flash:bench   tags: [stm32-bench]   → manual, st-flash
+hil:gpio      tags: [stm32-bench]   → manual/label, pytest
+release:tag   rules: tag v*         → glab release create
+
+flock /tmp/stm32-bench.lock -c "pytest -q tests/hil ..."</code></pre>
+</section>
+
+<section class="slide">
+<h2>HIL: quatro camadas do harness</h2>
+<pre><code>HOST    → compila, decide o próximo passo
+TARGET  → STM32 + ST-Link
+BENCH   → Raspberry Pi/Nanopi, fontes, lógico, UART
+FIELD   → telemetria do equipamento instalado</code></pre>
+<ul>
+<li>Um job por placa por vez (<code>flock</code>).</li>
+<li>Reset para estado conhecido antes de medir.</li>
+<li><code>artifacts: when: always</code> — log existe na falha.</li>
+<li>Fault injection: cortar rail, NACK, watchdog, underrun.</li>
+</ul>
+</section>
+
+<section class="slide">
+<h2>Rastreabilidade é cadeia</h2>
+<pre><code>SPEC.md (REQ-001)
+  → Issue #42
+  → feat(REQ-001): piscar LED de status #42
+  → MR !17 (Closes #42)
+  → pipeline: unit ✓ HIL ✓ junit anexado
+  → release v1.4.2+k7</code></pre>
+<p class="mut">Requirements do GitLab estão migrando para work items. Spec versionada + Issues + MRs + evidência é o caminho estável.</p>
+</section>
+
+<section class="slide">
+<h2>Release com evidência</h2>
+<ul>
+<li>Tag <code>vMAJOR.MINOR.PATCH+kREV</code> — <code>k</code> é a revisão da placa.</li>
+<li>Changelog gerado de MRs, nunca escrito à mão.</li>
+<li>Pipeline URL + junit do HIL + cobertura anexados.</li>
+<li><code>/verify</code> → <code>/code-review</code> → gates → checklist de 5 itens.</li>
+</ul>
+<pre><code>glab release create v1.4.2+k7 build/firmware.bin \
+  --notes "$(./scripts/changelog.sh)"</code></pre>
+</section>
+
+<section class="slide">
+<h2>O deliverable final de cada participante</h2>
+<table>
+<tr><th>Métrica</th><th>Antes</th><th>Depois</th></tr>
+<tr><td>Cache hit</td><td>41%</td><td>92%</td></tr>
+<tr><td>Tokens por turno</td><td>18k</td><td>3k</td></tr>
+<tr><td>MCPs ativos</td><td>5</td><td>1 (glab via CLI)</td></tr>
+<tr><td>Regras só em texto</td><td>9</td><td>2</td></tr>
+<tr><td>Hooks/deny rules</td><td>0</td><td>4</td></tr>
+<tr><td>Turnos com teste vermelho</td><td>3</td><td>0</td></tr>
+</table>
+</section>
+
+<section class="slide">
+<h2>Exercícios</h2>
+<ol>
+<li><code>CLAUDE.md</code> em 20 linhas, sem óbvio.</li>
+<li><code>/usage</code> antes/depois de <code>/clear</code>.</li>
+<li>Deny rule + Stop hook barrando de verdade.</li>
+<li>Teste vermelho antes da implementação.</li>
+<li>Pipeline com <code>flock</code> e junit no MR.</li>
+<li>Issue → commit → MR → tag → release.</li>
+</ol>
+<p class="mut">Material: <code>livro/index.html</code> · <code>referencias.md</code> · <code>capstone/</code></p>
+</section>
+
+<section class="slide">
+<h2>Recap</h2>
+<div class="grid">
+<div class="card"><b>Contexto</b><br>o que o agente não vê</div>
+<div class="card"><b>Skills</b><br>o como fazer, sob demanda</div>
+<div class="card"><b>Hooks</b><br>o que não tem exceção</div>
+<div class="card"><b>Custo</b><br>contexto limpo, modelo certo</div>
+<div class="card"><b>HIL</b><br>observação em vez de suposição</div>
+<div class="card"><b>Rastreio</b><br>REQ até o binário</div>
+</div>
+<blockquote>Pergunte sempre: o agente tem informação suficiente e existe um cheque determinístico antes de "pronto"?</blockquote>
+</section>
+
+</div>
+<div class="nav">
+<span id="counter"></span>
+<button id="prev">←</button>
+<button id="next">→</button>
+<button id="print">imprimir</button>
+</div>
+<script>
+const slides = [...document.querySelectorAll('.slide')];
+let i = 0;
+function show(n) {
+  i = Math.max(0, Math.min(slides.length - 1, n));
+  slides.forEach((s, k) => s.classList.toggle('on', k === i));
+  document.getElementById('counter').textContent = (i + 1) + ' / ' + slides.length;
+  document.getElementById('bar').style.width = ((i + 1) / slides.length * 100) + '%';
+  window.scrollTo(0, 0);
+}
+document.getElementById('next').onclick = () => show(i + 1);
+document.getElementById('prev').onclick = () => show(i - 1);
+document.getElementById('print').onclick = () => window.print();
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); show(i + 1); }
+  if (e.key === 'ArrowLeft') show(i - 1);
+  if (e.key.toLowerCase() === 'p') window.print();
+});
+show(0);
+</script>
+</body>
+</html>

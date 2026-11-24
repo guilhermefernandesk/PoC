@@ -1,0 +1,102 @@
+stages: [build, unit, static, flash, hil, release]
+
+variables:
+  GIT_DEPTH: "1"
+  FIRMWARE: "build/firmware.bin"
+  FLASH_ADDR: "0x8000000"
+
+default:
+  interruptible: true
+
+.default_docker: &docker
+  image: registry.gitlab.com/grupo/fw-toolchain:arm-gcc-12
+  tags: [docker]
+  cache:
+    key: "$CI_COMMIT_REF_SLUG"
+    paths: [build/, .deps/]
+
+build:fw:
+  <<: *docker
+  stage: build
+  script:
+    - cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    - cmake --build build -j
+    - arm-none-eabi-size build/firmware.elf
+  artifacts:
+    name: "fw-$CI_COMMIT_SHORT_SHA"
+    paths: [build/firmware.elf, build/firmware.bin, build/firmware.map]
+    expire_in: 1 week
+
+unit:ceedling:
+  <<: *docker
+  stage: unit
+  script:
+    - ceedling test:all
+    - ceedling gcov:all || true
+  artifacts:
+    when: always
+    reports:
+      junit: build/artifacts/test/*.xml
+    paths: [build/artifacts/gcov/]
+    expire_in: 1 week
+
+static:checks:
+  <<: *docker
+  stage: static
+  script:
+    - ./scripts/shellcheck.sh
+    - ./scripts/check-traceability.sh <(git log -1 --pretty=%s)
+    - "! grep -R 'stm32f1xx_hal.h' app/ --include='*.c' --include='*.h'"
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+flash:bench:
+  stage: flash
+  tags: [stm32-bench]
+  when: manual
+  allow_failure: false
+  dependencies: [build:fw]
+  script:
+    - flock /tmp/stm32-bench.lock -c "st-flash --reset write $FIRMWARE $FLASH_ADDR"
+  artifacts:
+    when: always
+    paths: [reports/hil/]
+
+hil:gpio:
+  stage: hil
+  tags: [stm32-bench]
+  when: manual
+  dependencies: [flash:bench]
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_LABELS =~ /run-hil/'
+    - if: '$CI_COMMIT_TAG =~ /^v/'
+    - when: manual
+  script:
+    - flock /tmp/stm32-bench.lock -c "pytest -q tests/hil --junitxml=reports/hil/results.xml"
+    - ./scripts/hil-summary.sh > reports/hil/summary.txt
+  artifacts:
+    when: always
+    paths: [reports/hil/]
+    reports:
+      junit: reports/hil/results.xml
+
+trace:commits:
+  <<: *docker
+  stage: static
+  script:
+    - |
+      base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-HEAD~1}"
+      for c in $(git log --format=%s "$base"..HEAD); do
+        ./scripts/check-traceability.sh <(printf '%s' "$c") || exit 1
+      done
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+
+release:tag:
+  <<: *docker
+  stage: release
+  rules:
+    - if: '$CI_COMMIT_TAG =~ /^v[0-9]+\.[0-9]+\.[0-9]+/'
+  script:
+    - grep -q "$CI_COMMIT_TAG" app/version.h || { echo "versao divergente" >&2; exit 2; }
+    - glab release create "$CI_COMMIT_TAG" build/firmware.bin --notes "$(./scripts/changelog.sh)"

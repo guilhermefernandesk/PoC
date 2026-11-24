@@ -1,0 +1,45 @@
+{
+  "permissions": {
+    "deny": [
+      "Edit(Drivers/**)",
+      "Write(Drivers/**)",
+      "Edit(Middlewares/**)",
+      "Write(Middlewares/**)",
+      "Read(.env)",
+      "Bash(git push --force *)"
+    ]
+  },
+  "sandbox": {
+    "enabled": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": ["gitlab.com"]
+    }
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "command": "./scripts/filter-test-output.sh",
+            "onFailure": "block"
+          },
+          {
+            "command": "./scripts/hook-commit-guard.sh",
+            "onFailure": "block"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "command": "ceedling test:all >/dev/null 2>~/.claude/stop-error.txt || { cat ~/.claude/stop-error.txt >&2; exit 2; }"
+          }
+        ]
+      }
+    ]
+  }
+}
